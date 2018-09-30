@@ -3,6 +3,7 @@ package gcode
 import (
 	"errors"
 	"io"
+	"math"
 	"runtime"
 	"strings"
 	"testing"
@@ -511,6 +512,10 @@ func evaluateExpr(p *Parser, expr expression) (num Number, err error) {
 	return
 }
 
+func notEq(n1, n2 Number) bool {
+	return math.Abs(float64(n1-n2)) > 0.000001
+}
+
 func TestExpressions(t *testing.T) {
 	cases := []struct {
 		s            string
@@ -578,8 +583,6 @@ func TestExpressions(t *testing.T) {
 		{s: "[2 * 3 + 4 * 5] ", num: 26},
 		{s: "[#test] ", num: 10},
 
-		{s: "[abs[123]] ", num: 123},
-		{s: "[abs[-123]] ", num: 123},
 		{s: "[a3[123]] ", pfail: true},
 		{s: "[abc[123]] ", pfail: true},
 		{s: "[abs +] ", pfail: true},
@@ -588,6 +591,51 @@ func TestExpressions(t *testing.T) {
 		{s: "[abs[123,456]] ", pfail: true},
 		{s: "[abs[123 456]] ", pfail: true},
 		{s: "[abs[123,456,]] ", pfail: true},
+
+		{s: "[abs[123]] ", num: 123},
+		{s: "[abs[-123]] ", num: 123},
+		{s: "[abs[123.456]] ", num: 123.456},
+		{s: "[abs[-123.456]] ", num: 123.456},
+
+		{s: "[sin[0]] ", num: 0},
+		{s: "[asin[0]] ", num: 0},
+		{s: "[sin[30]] ", num: 0.5},
+		{s: "[asin[0.5]] ", num: 30},
+		{s: "[sin[45]] ", num: Number(1 / math.Sqrt(2))},
+		{s: "[asin[1 / sqrt[2]]] ", num: 45},
+		{s: "[sin[60]] ", num: Number(math.Sqrt(3) / 2)},
+		{s: "[asin[sqrt[3] / 2]] ", num: 60},
+		{s: "[sin[90]] ", num: 1},
+		{s: "[asin[1]] ", num: 90},
+
+		{s: "[cos[0]] ", num: 1},
+		{s: "[acos[1]] ", num: 0},
+		{s: "[cos[30]] ", num: Number(math.Sqrt(3) / 2)},
+		{s: "[acos[sqrt[3] / 2]] ", num: 30},
+		{s: "[cos[45]] ", num: Number(1 / math.Sqrt(2))},
+		{s: "[acos[1 / sqrt[2]]] ", num: 45},
+		{s: "[cos[60]] ", num: 0.5},
+		{s: "[acos[0.5]] ", num: 60},
+		{s: "[cos[90]] ", num: 0},
+		{s: "[acos[0]] ", num: 90},
+
+		{s: "[tan[0]] ", num: 0},
+		{s: "[atan[0]] ", num: 0},
+		{s: "[tan[30]] ", num: Number(1 / math.Sqrt(3))},
+		{s: "[atan[1 / sqrt[3]]] ", num: 30},
+		{s: "[tan[45]] ", num: 1},
+		{s: "[atan[1]] ", num: 45},
+		{s: "[tan[60]] ", num: Number(math.Sqrt(3))},
+		{s: "[atan[sqrt[3]]] ", num: 60},
+
+		{s: "[ceil[12.34]] ", num: 13},
+		{s: "[ceil[-12.34]] ", num: -12},
+		{s: "[floor[12.34]] ", num: 12},
+		{s: "[floor[-12.34]] ", num: -13},
+		{s: "[round[12.34]] ", num: 12},
+		{s: "[round[-12.34]] ", num: -12},
+		{s: "[round[34.56]] ", num: 35},
+		{s: "[round[-34.56]] ", num: -35},
 	}
 
 	for _, c := range cases {
@@ -624,7 +672,7 @@ func TestExpressions(t *testing.T) {
 			}
 		} else if err != nil {
 			t.Errorf("evaluateExpr(%s) failed with %s", c.s, err)
-		} else if n != c.num {
+		} else if notEq(n, c.num) {
 			t.Errorf("evaluateExpr(%s) got %s, want %s", c.s, n, c.num)
 		}
 	}

@@ -110,7 +110,17 @@ var (
 		fn      callFunc
 		numArgs int
 	}{
-		"ABS": {fn: abs, numArgs: 1},
+		"ABS":   {fn: abs, numArgs: 1},
+		"ACOS":  {fn: acos, numArgs: 1},
+		"ASIN":  {fn: asin, numArgs: 1},
+		"ATAN":  {fn: atan, numArgs: 1},
+		"CEIL":  {fn: ceil, numArgs: 1},
+		"COS":   {fn: cos, numArgs: 1},
+		"FLOOR": {fn: floor, numArgs: 1},
+		"ROUND": {fn: round, numArgs: 1},
+		"SIN":   {fn: sin, numArgs: 1},
+		"SQRT":  {fn: sqrt, numArgs: 1},
+		"TAN":   {fn: tan, numArgs: 1},
 	}
 )
 
@@ -311,10 +321,55 @@ func (p *Parser) Parse() (code Code, num Number, err error) {
 }
 
 func abs(p *Parser, args []Number) Number {
-	if args[0] < 0 {
-		return -args[0]
-	}
-	return args[0]
+	return Number(math.Abs(float64(args[0])))
+}
+
+func toDegrees(r float64) Number {
+	return Number((r * 180) / math.Pi)
+}
+
+func toRadians(d Number) float64 {
+	return (float64(d) * math.Pi) / 180
+}
+
+func acos(p *Parser, args []Number) Number {
+	return toDegrees(math.Acos(float64(args[0])))
+}
+
+func asin(p *Parser, args []Number) Number {
+	return toDegrees(math.Asin(float64(args[0])))
+}
+
+func atan(p *Parser, args []Number) Number {
+	return toDegrees(math.Atan(float64(args[0])))
+}
+
+func ceil(p *Parser, args []Number) Number {
+	return Number(math.Ceil(float64(args[0])))
+}
+
+func cos(p *Parser, args []Number) Number {
+	return Number(math.Cos(toRadians(args[0])))
+}
+
+func floor(p *Parser, args []Number) Number {
+	return Number(math.Floor(float64(args[0])))
+}
+
+func round(p *Parser, args []Number) Number {
+	return Number(math.Round(float64(args[0])))
+}
+
+func sin(p *Parser, args []Number) Number {
+	return Number(math.Sin(toRadians(args[0])))
+}
+
+func sqrt(p *Parser, args []Number) Number {
+	return Number(math.Sqrt(float64(args[0])))
+}
+
+func tan(p *Parser, args []Number) Number {
+	return Number(math.Tan(toRadians(args[0])))
 }
 
 func (p *Parser) error(msg string) {
@@ -483,7 +538,7 @@ func (p *Parser) parseSubExpr() expression {
 					fmt.Sprintf("wrong number of arguments to function %s: got %d, want %d",
 						sym, len(c.args), fi.numArgs))
 			}
-			return &c
+			e = &c
 		} else {
 			p.unreadByte()
 			e = p.parseNumber()
