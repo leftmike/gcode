@@ -48,31 +48,32 @@ func TestParser(t *testing.T) {
 		{s: "G-0.\n", cmds: []cmd{{'G', 0}}},
 		{s: "G0.\n", cmds: []cmd{{'G', 0}}},
 		{s: "G.0\n", cmds: []cmd{{'G', 0}}},
-		{s: "G-10.20\n", cmds: []cmd{{'G', -10}}}, // XXX: missing fraction
-		{s: "G+10.20\n", cmds: []cmd{{'G', 10}}},  // XXX: missing fraction
+		{s: "G-10.20\n", cmds: []cmd{{'G', -10.20}}},
+		{s: "G+10.20\n", cmds: []cmd{{'G', 10.20}}},
 
 		{s: "G10 *20\n", cmds: []cmd{{'G', 10}}},
 		{s: "G10 *20 ;comment\nG30\n", cmds: []cmd{{'G', 10}, {'G', 30}}},
 		{s: "G10 *20 G30\n", cmds: []cmd{{'G', 10}}, fail: true},
 
 		{s: "N10 G20\n", cmds: []cmd{{'G', 20}}},
-		{s: "G10\nG20\n\nN1 G2\n", fail: true, cmds: []cmd{{'G', 10}, {'G', 20}}},
+		{s: "G10\nG20\n\nN1 G2\n", fail: true,
+			cmds: []cmd{{'G', 10}, {'G', 20}}},
 		{s: "N10 G-\n", fail: true},
 		{s: "N9999999999999999 G10\n", fail: true},
 		{s: "*123 G10\n", fail: true},
 		{s: "*123 WHILE\n", fail: true},
 	}
 
-	for _, c := range cases {
+	for i, c := range cases {
 		p := Parser{
 			Scanner: strings.NewReader(c.s),
 		}
-		for i, cmd := range c.cmds {
+		for _, cmd := range c.cmds {
 			code, num, err := p.Parse()
 			if err != nil {
 				t.Errorf("Parse(%s) failed with %s", c.s, err)
 			} else if code != cmd.code || num != cmd.num {
-				t.Errorf("Parse(%s)[%d]: got %c%d want %c%d", c.s, i, code, num, cmd.code, cmd.num)
+				t.Errorf("Parse(%s)[%d]: got %c%s want %c%s", c.s, i, code, num, cmd.code, cmd.num)
 			}
 		}
 		_, _, err := p.Parse()
@@ -242,7 +243,7 @@ func TestParseNameAssignment(t *testing.T) {
 			if !ok {
 				t.Errorf("Parse(%s): name parameter %s not found", c.s, c.name)
 			} else if val != c.val {
-				t.Errorf("Parse(%s): got %d want %d", c.s, val, c.val)
+				t.Errorf("Parse(%s): got %s want %s", c.s, val, c.val)
 			}
 		}
 	}
@@ -333,7 +334,7 @@ func TestParseNumAssignment(t *testing.T) {
 			if !ok {
 				t.Errorf("Parse(%s): num parameter %d not found", c.s, c.num)
 			} else if val != c.val {
-				t.Errorf("Parse(%s): got %d want %d", c.s, val, c.val)
+				t.Errorf("Parse(%s): got %s want %s", c.s, val, c.val)
 			}
 		}
 	}
@@ -475,7 +476,7 @@ func TestParameters(t *testing.T) {
 		} else if code != c.code {
 			t.Errorf("Parse(%s) got %c want %c", c.s, code, c.code)
 		} else if num != c.num {
-			t.Errorf("Parse(%s) got %d want %d", c.s, num, c.num)
+			t.Errorf("Parse(%s) got %s want %s", c.s, num, c.num)
 		}
 	}
 }
@@ -594,7 +595,7 @@ func TestExpressions(t *testing.T) {
 			Scanner: strings.NewReader(c.s),
 			GetNumParam: func(num int) (Number, error) {
 				if num < 100 {
-					return Number(num + 100), nil
+					return Number(num) + 100, nil
 				}
 				return 0, errors.New("not found")
 			},
@@ -624,7 +625,7 @@ func TestExpressions(t *testing.T) {
 		} else if err != nil {
 			t.Errorf("evaluateExpr(%s) failed with %s", c.s, err)
 		} else if n != c.num {
-			t.Errorf("evaluateExpr(%s) got %d, want %d", c.s, n, c.num)
+			t.Errorf("evaluateExpr(%s) got %s, want %s", c.s, n, c.num)
 		}
 	}
 }

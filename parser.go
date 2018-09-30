@@ -5,11 +5,11 @@ import (
 	"io"
 	"math"
 	"runtime"
+	"strconv"
 )
 
-// XXX: use fixed point numbers or float64?
-type Number int64
 type Code byte
+type Number float64
 
 type Parser struct {
 	Scanner io.ByteScanner
@@ -153,6 +153,10 @@ type callFunc func(p *Parser, args []Number) Number
 type call struct {
 	fn   callFunc
 	args []expression
+}
+
+func (n Number) String() string {
+	return strconv.FormatFloat(float64(n), 'f', 6, 64)
 }
 
 func (n Number) evaluate(p *Parser) Number {
@@ -358,30 +362,25 @@ func (p *Parser) skipWhitespace() {
 }
 
 func (p *Parser) parseNumber() expression {
+	var bytes []byte
 	var neg bool
 	b := p.readByte()
 	if b == '-' {
 		neg = true
 	} else if b != '+' {
-		p.Scanner.UnreadByte()
+		bytes = append(bytes, b)
 	}
 
-	var whole uint64
-	var fraction uint64
-	var cnt int
 	for {
 		b := p.readByte()
 		if b >= '0' && b <= '9' {
-			cnt += 1
-			whole = (whole * 10) + uint64(b-'0')
-			// XXX: check for overflow
+			bytes = append(bytes, b)
 		} else if b == '.' {
+			bytes = append(bytes, b)
 			for {
 				b := p.readByte()
 				if b >= '0' && b <= '9' {
-					cnt += 1
-					fraction = (fraction * 10) + uint64(b-'0')
-					// XXX: check for overflow
+					bytes = append(bytes, b)
 				} else {
 					break
 				}
@@ -391,18 +390,17 @@ func (p *Parser) parseNumber() expression {
 			break
 		}
 	}
-
-	if cnt == 0 {
-		p.error("expected a number")
-	}
-
-	// XXX: also need the fractional part
-	num := Number(whole)
-	if neg {
-		num *= -1
-	}
 	p.unreadByte()
-	return num
+
+	n, err := strconv.ParseFloat(string(bytes), 64)
+	if err != nil {
+		p.error("not a number")
+	}
+
+	if neg {
+		n *= -1
+	}
+	return Number(n)
 }
 
 /*
