@@ -51,10 +51,9 @@ To Do:
 - ignore spaces & tabs when parsing <code> <expr>
 - LinuxCNC: don't apply assignments until entire line is parsed
 - BeagleG: assignements take effect immediately
-- make sure G##2 works
 - #param is BeagleG only (as compared to #<param>
 - _ prefix for global parameter names
-- add strings and parameter names as parts of expressions
+- change command to be an interface
 */
 
 import (
@@ -66,7 +65,15 @@ import (
 )
 
 type Code byte
+type Name string
 type Number float64
+type String string
+
+type Value interface {
+	AsName() (Name, bool)
+	AsNumber() (Number, bool)
+	AsString() (String, bool)
+}
 
 type Dialect int
 
@@ -99,11 +106,11 @@ type Parser struct {
 	sawChecksum  bool // Used to validate that *nnn is at the end of a line
 	physicalLine int  // Count of lines
 	virtualLine  int  // Lines as tracked by Nnnn
-	nameParams   map[string]Number
+	nameParams   map[Name]Value
 }
 
 type expression interface {
-	evaluate(p *Parser) Number
+	evaluate(p *Parser) Value
 }
 
 type commandType byte
@@ -190,8 +197,10 @@ var (
 	}
 )
 
-type numParam int
-type nameParam string
+type param struct {
+	refs int
+	expr expression
+}
 
 type op int
 
@@ -224,7 +233,7 @@ type binary struct {
 	right expression
 }
 
-type callFunc func(p *Parser, args []Number) Number
+type callFunc func(p *Parser, args []Value) Value
 
 type call struct {
 	fn   callFunc
@@ -235,39 +244,102 @@ func (n Number) String() string {
 	return strconv.FormatFloat(float64(n), 'f', 6, 64)
 }
 
-func (n Number) evaluate(p *Parser) Number {
+func (_ Number) AsName() (Name, bool) {
+	return "", false
+}
+
+func (n Number) AsNumber() (Number, bool) {
+	return n, true
+}
+
+func (_ Number) AsString() (String, bool) {
+	return "", false
+}
+
+func (n Number) evaluate(p *Parser) Value {
 	return n
 }
 
-func (np numParam) evaluate(p *Parser) Number {
-	if p.GetNumParam == nil || p.SetNumParam == nil {
-		p.error("number parameters not supported")
-	}
-	num, err := p.GetNumParam(int(np))
-	if err != nil {
-		p.error(err.Error())
-	}
-	return num
+func (n Name) String() string {
+	return fmt.Sprintf("<%s>", string(n))
 }
 
-func (np nameParam) evaluate(p *Parser) Number {
-	val, ok := p.nameParams[string(np)]
-	if !ok {
-		p.error(fmt.Sprintf("undefined name parameter: %s", string(np)))
-	}
-	return val
+func (n Name) AsName() (Name, bool) {
+	return n, true
 }
 
-func (u *unary) evaluate(p *Parser) Number {
+func (_ Name) AsNumber() (Number, bool) {
+	return 0, false
+}
+
+func (_ Name) AsString() (String, bool) {
+	return "", false
+}
+
+func (n Name) evaluate(p *Parser) Value {
+	return n
+}
+
+func (s String) String() string {
+	return fmt.Sprintf(`"%s"`, string(s))
+}
+
+func (_ String) AsName() (Name, bool) {
+	return "", false
+}
+
+func (_ String) AsNumber() (Number, bool) {
+	return 0, false
+}
+
+func (s String) AsString() (String, bool) {
+	return s, true
+}
+
+func (s String) evaluate(p *Parser) Value {
+	return s
+}
+
+func (prm param) evaluate(p *Parser) Value {
+	v := prm.expr.evaluate(p)
+	if num, ok := v.AsNumber(); ok {
+		if p.GetNumParam == nil || p.SetNumParam == nil {
+			p.error("number parameters not supported")
+		}
+		for refs := 0; refs < prm.refs; refs += 1 {
+			var err error
+			num, err = p.GetNumParam(int(num))
+			if err != nil {
+				p.error(err.Error())
+			}
+		}
+		return num
+	}
+
+	for refs := 0; refs < prm.refs; refs += 1 {
+		n, ok := v.AsName()
+		if !ok {
+			p.error("expected a name parameter")
+		}
+		v, ok = p.nameParams[n]
+		if !ok {
+			p.error(fmt.Sprintf("undefined name parameter: %s", n))
+		}
+	}
+
+	return v
+}
+
+func (u *unary) evaluate(p *Parser) Value {
 	switch u.op {
 	case negateOp:
-		return -u.expr.evaluate(p)
+		return -p.wantNumber(u.expr.evaluate(p))
 	case notOp:
-		n := u.expr.evaluate(p)
+		n := p.wantNumber(u.expr.evaluate(p))
 		if n == 0 {
-			return 1
+			return Number(1)
 		} else {
-			return 0
+			return Number(0)
 		}
 	case noOp:
 		return u.expr.evaluate(p)
@@ -275,72 +347,72 @@ func (u *unary) evaluate(p *Parser) Number {
 		panic(fmt.Sprintf("unexpected unary op: %d", u.op))
 	}
 
-	return 0
+	return Number(0)
 }
 
 func (op op) precedence() int {
 	return opPrecedence[op]
 }
 
-func logicNumber(n Number) Number {
+func logicNumber(n Number) Value {
 	if n == 0 {
-		return 0
+		return Number(0)
 	} else {
-		return 1
+		return Number(1)
 	}
 }
 
-func logicBool(b bool) Number {
+func logicBool(b bool) Value {
 	if b {
-		return 1
+		return Number(1)
 	} else {
-		return 0
+		return Number(0)
 	}
 }
 
-func (b *binary) evaluate(p *Parser) Number {
+func (b *binary) evaluate(p *Parser) Value {
 	switch b.op {
 	case andOp:
-		n := b.left.evaluate(p)
+		n := p.wantNumber(b.left.evaluate(p))
 		if n == 0 {
-			return 0
+			return Number(0)
 		}
-		return logicNumber(b.right.evaluate(p))
+		return logicNumber(p.wantNumber(b.right.evaluate(p)))
 	case orOp:
-		n := b.left.evaluate(p)
+		n := p.wantNumber(b.left.evaluate(p))
 		if n != 0 {
-			return 1
+			return Number(1)
 		}
-		return logicNumber(b.right.evaluate(p))
+		return logicNumber(p.wantNumber(b.right.evaluate(p)))
 	case equalOp:
-		return logicBool(b.left.evaluate(p) == b.right.evaluate(p))
+		return logicBool(p.wantNumber(b.left.evaluate(p)) == p.wantNumber(b.right.evaluate(p)))
 	case notEqualOp:
-		return logicBool(b.left.evaluate(p) != b.right.evaluate(p))
+		return logicBool(p.wantNumber(b.left.evaluate(p)) != p.wantNumber(b.right.evaluate(p)))
 	case greaterThanOp:
-		return logicBool(b.left.evaluate(p) > b.right.evaluate(p))
+		return logicBool(p.wantNumber(b.left.evaluate(p)) > p.wantNumber(b.right.evaluate(p)))
 	case greaterEqualOp:
-		return logicBool(b.left.evaluate(p) >= b.right.evaluate(p))
+		return logicBool(p.wantNumber(b.left.evaluate(p)) >= p.wantNumber(b.right.evaluate(p)))
 	case lessThanOp:
-		return logicBool(b.left.evaluate(p) < b.right.evaluate(p))
+		return logicBool(p.wantNumber(b.left.evaluate(p)) < p.wantNumber(b.right.evaluate(p)))
 	case lessEqualOp:
-		return logicBool(b.left.evaluate(p) <= b.right.evaluate(p))
+		return logicBool(p.wantNumber(b.left.evaluate(p)) <= p.wantNumber(b.right.evaluate(p)))
 	case subtractOp:
-		return b.left.evaluate(p) - b.right.evaluate(p)
+		return p.wantNumber(b.left.evaluate(p)) - p.wantNumber(b.right.evaluate(p))
 	case addOp:
-		return b.left.evaluate(p) + b.right.evaluate(p)
+		return p.wantNumber(b.left.evaluate(p)) + p.wantNumber(b.right.evaluate(p))
 	case divideOp:
-		return b.left.evaluate(p) / b.right.evaluate(p)
+		return p.wantNumber(b.left.evaluate(p)) / p.wantNumber(b.right.evaluate(p))
 	case multiplyOp:
-		return b.left.evaluate(p) * b.right.evaluate(p)
+		return p.wantNumber(b.left.evaluate(p)) * p.wantNumber(b.right.evaluate(p))
 	default:
 		panic(fmt.Sprintf("unexpected binary op: %d", b.op))
 	}
 
-	return 0
+	return Number(0)
 }
 
-func (c *call) evaluate(p *Parser) Number {
-	args := make([]Number, len(c.args))
+func (c *call) evaluate(p *Parser) Value {
+	args := make([]Value, len(c.args))
 	for i, a := range c.args {
 		args[i] = a.evaluate(p)
 	}
@@ -365,7 +437,7 @@ func (p *Parser) Parse() (code Code, num Number, err error) {
 		if cmd.typ >= firstCodeType && cmd.typ <= lastCodeType {
 			// Codes
 
-			num := cmd.expr.evaluate(p)
+			num := p.wantNumber(cmd.expr.evaluate(p))
 			return Code(cmd.typ), num, nil
 		} else if cmd.typ == assignmentType {
 			// Assignments
@@ -386,8 +458,8 @@ func (p *Parser) Parse() (code Code, num Number, err error) {
 	}
 }
 
-func abs(p *Parser, args []Number) Number {
-	return Number(math.Abs(float64(args[0])))
+func abs(p *Parser, args []Value) Value {
+	return Number(math.Abs(float64(p.wantNumber(args[0]))))
 }
 
 func toDegrees(r float64) Number {
@@ -398,44 +470,52 @@ func toRadians(d Number) float64 {
 	return (float64(d) * math.Pi) / 180
 }
 
-func acos(p *Parser, args []Number) Number {
-	return toDegrees(math.Acos(float64(args[0])))
+func acos(p *Parser, args []Value) Value {
+	return toDegrees(math.Acos(float64(p.wantNumber(args[0]))))
 }
 
-func asin(p *Parser, args []Number) Number {
-	return toDegrees(math.Asin(float64(args[0])))
+func asin(p *Parser, args []Value) Value {
+	return toDegrees(math.Asin(float64(p.wantNumber(args[0]))))
 }
 
-func atan(p *Parser, args []Number) Number {
-	return toDegrees(math.Atan(float64(args[0])))
+func atan(p *Parser, args []Value) Value {
+	return toDegrees(math.Atan(float64(p.wantNumber(args[0]))))
 }
 
-func ceil(p *Parser, args []Number) Number {
-	return Number(math.Ceil(float64(args[0])))
+func ceil(p *Parser, args []Value) Value {
+	return Number(math.Ceil(float64(p.wantNumber(args[0]))))
 }
 
-func cos(p *Parser, args []Number) Number {
-	return Number(math.Cos(toRadians(args[0])))
+func cos(p *Parser, args []Value) Value {
+	return Number(math.Cos(toRadians(p.wantNumber(args[0]))))
 }
 
-func floor(p *Parser, args []Number) Number {
-	return Number(math.Floor(float64(args[0])))
+func floor(p *Parser, args []Value) Value {
+	return Number(math.Floor(float64(p.wantNumber(args[0]))))
 }
 
-func round(p *Parser, args []Number) Number {
-	return Number(math.Round(float64(args[0])))
+func round(p *Parser, args []Value) Value {
+	return Number(math.Round(float64(p.wantNumber(args[0]))))
 }
 
-func sin(p *Parser, args []Number) Number {
-	return Number(math.Sin(toRadians(args[0])))
+func sin(p *Parser, args []Value) Value {
+	return Number(math.Sin(toRadians(p.wantNumber(args[0]))))
 }
 
-func sqrt(p *Parser, args []Number) Number {
-	return Number(math.Sqrt(float64(args[0])))
+func sqrt(p *Parser, args []Value) Value {
+	return Number(math.Sqrt(float64(p.wantNumber(args[0]))))
 }
 
-func tan(p *Parser, args []Number) Number {
-	return Number(math.Tan(toRadians(args[0])))
+func tan(p *Parser, args []Value) Value {
+	return Number(math.Tan(toRadians(p.wantNumber(args[0]))))
+}
+
+func (p *Parser) wantNumber(v Value) Number {
+	n, ok := v.AsNumber()
+	if !ok {
+		p.error("expected a number")
+	}
+	return n
 }
 
 func (p *Parser) error(msg string) {
@@ -545,13 +625,7 @@ func (p *Parser) parseSubExpr() expression {
 			p.error(fmt.Sprintf("expected closing brace, got %c", b))
 		}
 	case '#':
-		// # <param>
-		num, name := p.parseParameter()
-		if name == "" {
-			e = numParam(num)
-		} else {
-			e = nameParam(name)
-		}
+		e = p.parseReference()
 	default:
 		b = upcaseByte(b)
 		if b >= 'A' && b <= 'Z' {
@@ -698,17 +772,34 @@ func adjustPrecedence(e expression) expression {
 	return e
 }
 
+func (p *Parser) parseReference() expression {
+	// #+ <param>
+	refs := 1
+	b := p.readByte()
+	for b == '#' {
+		refs += 1
+		b = p.readByte()
+	}
+	p.unreadByte()
+
+	if b == '[' {
+		return param{refs: refs, expr: p.parseExpr()}
+	}
+
+	num, name := p.parseParameter()
+	if name == "" {
+		return param{refs: refs, expr: Number(num)}
+	} else {
+		return param{refs: refs, expr: Name(name)}
+	}
+}
+
 func (p *Parser) parseExpr() expression {
 	p.skipWhitespace()
 	b := p.readByte()
 	switch b {
 	case '#':
-		num, name := p.parseParameter()
-		if name == "" {
-			return numParam(num)
-		} else {
-			return nameParam(name)
-		}
+		return p.parseReference()
 	case '[':
 		e := adjustPrecedence(p.parseSubExpr())
 		p.skipWhitespace()
@@ -717,6 +808,7 @@ func (p *Parser) parseExpr() expression {
 			p.error(fmt.Sprintf("expected closing brace, got %c", b))
 		}
 		return e
+	// XXX: need to handle <name>
 	default:
 		p.unreadByte()
 		return p.parseNumber()
@@ -879,6 +971,7 @@ func (p *Parser) evaluateAssignment(cmd *command) {
 		if p.GetNumParam == nil || p.SetNumParam == nil {
 			p.error("number parameters not supported")
 		}
+		val := p.wantNumber(val)
 
 		switch cmd.assignOp {
 		case assign:
@@ -927,36 +1020,37 @@ func (p *Parser) evaluateAssignment(cmd *command) {
 		}
 	} else {
 		if p.nameParams == nil {
-			p.nameParams = map[string]Number{}
+			p.nameParams = map[Name]Value{}
 		}
+		name := Name(cmd.stringVal)
 
 		switch cmd.assignOp {
 		case assign:
-			p.nameParams[cmd.stringVal] = val
+			p.nameParams[name] = val
 		case assignPlus, plusPlus:
-			cur, ok := p.nameParams[cmd.stringVal]
+			cur, ok := p.nameParams[name]
 			if !ok {
-				p.error(fmt.Sprintf("undefined name parameter: %s", cmd.stringVal))
+				p.error(fmt.Sprintf("undefined name parameter: %s", name))
 			}
-			p.nameParams[cmd.stringVal] = cur + val
+			p.nameParams[name] = p.wantNumber(cur) + p.wantNumber(val)
 		case assignMinus, minusMinus:
-			cur, ok := p.nameParams[cmd.stringVal]
+			cur, ok := p.nameParams[name]
 			if !ok {
-				p.error(fmt.Sprintf("undefined name parameter: %s", cmd.stringVal))
+				p.error(fmt.Sprintf("undefined name parameter: %s", name))
 			}
-			p.nameParams[cmd.stringVal] = cur - val
+			p.nameParams[name] = p.wantNumber(cur) - p.wantNumber(val)
 		case assignTimes:
-			cur, ok := p.nameParams[cmd.stringVal]
+			cur, ok := p.nameParams[name]
 			if !ok {
-				p.error(fmt.Sprintf("undefined name parameter: %s", cmd.stringVal))
+				p.error(fmt.Sprintf("undefined name parameter: %s", name))
 			}
-			p.nameParams[cmd.stringVal] = cur * val
+			p.nameParams[name] = p.wantNumber(cur) * p.wantNumber(val)
 		case assignDivide:
-			cur, ok := p.nameParams[cmd.stringVal]
+			cur, ok := p.nameParams[name]
 			if !ok {
-				p.error(fmt.Sprintf("undefined name parameter: %s", cmd.stringVal))
+				p.error(fmt.Sprintf("undefined name parameter: %s", name))
 			}
-			p.nameParams[cmd.stringVal] = cur / val
+			p.nameParams[name] = p.wantNumber(cur) / p.wantNumber(val)
 		default:
 			panic(fmt.Sprintf("unexpected assign op: %d", cmd.assignOp))
 		}

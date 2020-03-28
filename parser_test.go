@@ -2,6 +2,7 @@ package gcode
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"runtime"
@@ -203,7 +204,7 @@ func TestParseAssignOp(t *testing.T) {
 func TestParseNameAssignment(t *testing.T) {
 	cases := []struct {
 		s    string
-		name string
+		name Name
 		val  Number
 		fail bool
 	}{
@@ -455,7 +456,9 @@ func TestParameters(t *testing.T) {
 
 		{s: "#999=22\nG#999\n", code: 'G', num: 22},
 		{s: "G#888\n", fail: true},
-		//		{s: "#1=2 #2=3\nG##1\n", code: 'G', num: 3},
+		{s: "#1=2 #2=3\nG##1\n", code: 'G', num: 3},
+		{s: "#3=4\nG#[1+2]\n", code: 'G', num: 4},
+		{s: "#3=5\n#4=#[1+2]\nG#4\n", code: 'G', num: 5},
 
 		{s: "#abc=10\n*#abc ", fail: true},
 		{s: "#abc=10\nN#abc ", fail: true},
@@ -519,7 +522,12 @@ func evaluateExpr(p *Parser, expr expression) (num Number, err error) {
 		}
 	}()
 
-	num = expr.evaluate(p)
+	val := expr.evaluate(p)
+	var ok bool
+	num, ok = val.AsNumber()
+	if !ok {
+		err = fmt.Errorf("expected a number: %v", val)
+	}
 	return
 }
 
@@ -663,8 +671,8 @@ func TestExpressions(t *testing.T) {
 				return errors.New("should not be called")
 			},
 		}
-		p.nameParams = map[string]Number{}
-		p.nameParams["test"] = 10
+		p.nameParams = map[Name]Value{}
+		p.nameParams["test"] = Number(10)
 
 		e, err := parseExpr(&p)
 		if c.pfail {
