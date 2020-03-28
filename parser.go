@@ -626,6 +626,10 @@ func (p *Parser) parseSubExpr() expression {
 		}
 	case '#':
 		e = p.parseReference()
+	case '<':
+		e = p.parseName()
+	case '"':
+		e = p.parseString()
 	default:
 		b = upcaseByte(b)
 		if b >= 'A' && b <= 'Z' {
@@ -808,7 +812,10 @@ func (p *Parser) parseExpr() expression {
 			p.error(fmt.Sprintf("expected closing brace, got %c", b))
 		}
 		return e
-	// XXX: need to handle <name>
+	case '<':
+		return p.parseName()
+	case '"':
+		return p.parseString()
 	default:
 		p.unreadByte()
 		return p.parseNumber()
@@ -869,7 +876,7 @@ func upcaseByte(b byte) byte {
 	return b
 }
 
-func parameterByte(b byte) bool {
+func nameByte(b byte) bool {
 	return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9') || b == '_'
 }
 
@@ -891,20 +898,17 @@ func (p *Parser) parseParameter() (int, string) {
 
 		p.Scanner.UnreadByte()
 		return num, ""
-	} else if parameterByte(b) || b == '<' {
+	} else if nameByte(b) || b == '<' {
 		var delim bool
 		if b == '<' {
 			delim = true
 			b = p.readByte()
-			if b >= '0' && b <= '9' {
-				p.error("bracketed (#<>) numeric parameters not allowed")
-			}
 		}
 
 		name := []byte{b}
 		for {
 			b = p.readByte()
-			if parameterByte(b) {
+			if nameByte(b) {
 				name = append(name, b)
 			} else {
 				break
@@ -924,6 +928,41 @@ func (p *Parser) parseParameter() (int, string) {
 
 	p.error(fmt.Sprintf("expected parameter name or number; got %c", b))
 	return 0, ""
+}
+
+func (p *Parser) parseString() String {
+	var b byte
+	var s []byte
+	for {
+		b = p.readByte()
+		if b == '"' {
+			break
+		} else if b == '\\' {
+			b = p.readByte()
+		}
+		s = append(s, b)
+	}
+	return String(s)
+}
+
+func (p *Parser) parseName() Name {
+	var b byte
+	var name []byte
+	for {
+		b = p.readByte()
+		if nameByte(b) {
+			name = append(name, b)
+		} else {
+			break
+		}
+	}
+
+	if b != '>' {
+		p.error("missing > at end of parameter")
+	} else if len(name) == 0 {
+		p.error("empty names not allowed")
+	}
+	return Name(name)
 }
 
 func (p *Parser) parseAssignOp() assignOp {

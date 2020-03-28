@@ -115,7 +115,7 @@ func TestParseParameter(t *testing.T) {
 	}{
 		{s: "#123 ", num: 123},
 		{s: "#123G", num: 123},
-		{s: "#<123> ", fail: true},
+		{s: "#<123> ", name: "123"},
 		{s: "#abc ", name: "abc"},
 		{s: "#abc_123 ", name: "abc_123"},
 		{s: "#<abc>", name: "abc"},
@@ -123,6 +123,7 @@ func TestParseParameter(t *testing.T) {
 		{s: "#<abc ", fail: true},
 		{s: "#$$$ ", fail: true},
 		{s: "#123456789 ", fail: true},
+		{s: "#<>", fail: true},
 	}
 
 	for _, c := range cases {
@@ -460,6 +461,8 @@ func TestParameters(t *testing.T) {
 		{s: "#3=4\nG#[1+2]\n", code: 'G', num: 4},
 		{s: "#3=5\n#4=#[1+2]\nG#4\n", code: 'G', num: 5},
 
+		{s: "#abc=<def> #def=11\nG##abc\n", code: 'G', num: 11},
+
 		{s: "#abc=10\n*#abc ", fail: true},
 		{s: "#abc=10\nN#abc ", fail: true},
 	}
@@ -694,6 +697,62 @@ func TestExpressions(t *testing.T) {
 			t.Errorf("evaluateExpr(%s) failed with %s", c.s, err)
 		} else if notEq(n, c.num) {
 			t.Errorf("evaluateExpr(%s) got %s, want %s", c.s, n, c.num)
+		}
+	}
+}
+
+func valuesEqual(v1, v2 Value) bool {
+	if n1, ok := v1.AsNumber(); ok {
+		n2, ok := v2.AsNumber()
+		return ok && n1 == n2
+	} else if n1, ok := v1.AsName(); ok {
+		n2, ok := v2.AsName()
+		return ok && n1 == n2
+	} else if s1, ok := v1.AsString(); ok {
+		s2, ok := v2.AsString()
+		return ok && s1 == s2
+	}
+	return false
+}
+
+func TestValues(t *testing.T) {
+	cases := []struct {
+		s     string
+		pfail bool
+		v     Value
+	}{
+		{s: "123 ", v: Number(123)},
+
+		{s: `"abc"`, v: String("abc")},
+		{s: `"abc`, pfail: true},
+		{s: `"abc\"def"`, v: String(`abc"def`)},
+
+		{s: "<abc>", v: Name("abc")},
+		{s: "<123>", v: Name("123")},
+		{s: "<>", pfail: true},
+		{s: `<abc"`, pfail: true},
+	}
+
+	for _, c := range cases {
+		p := Parser{
+			Scanner: strings.NewReader(c.s),
+			Dialect: BeagleG,
+		}
+
+		e, err := parseExpr(&p)
+		if c.pfail {
+			if err == nil {
+				t.Errorf("parseExpr(%s) did not fail", c.s)
+			}
+			continue
+		} else if err != nil {
+			t.Errorf("parseExpr(%s) failed with %s", c.s, err)
+			continue
+		}
+
+		v := e.evaluate(&p)
+		if !valuesEqual(v, c.v) {
+			t.Errorf("evaluate(%s) got %s, want %s", c.s, v, c.v)
 		}
 	}
 }
