@@ -1,5 +1,62 @@
 package gcode
 
+/*
+BeagleG Dialect:
+
+<line> = <prefix> <body> <suffix> ('\r' | '\n')
+<prefix> = (<whitespace> | <inline-comment>)* ['N' <integer>]
+<suffix> = ['*' <integer> <whitespace>*] [<trailing-comment>]
+<body> =
+      (<whitespace> | <inline-comment> | <command> | <assignment>)*
+    | 'IF' <expr> 'THEN' <assignment> ('ELSEIF' <expr> 'THEN' <assignment>)* ['ELSE' <assignment>]
+    | <while>
+<while> = 'WHILE' <expr> 'DO' <suffix> <line>* <suffix> 'END'
+<command> = <code> <expr>
+<assignment> =
+      <parameter> <whitespace>* <assign-op> <whitespace>* <expr>
+    | <parameter> '++'
+    | <parameter> '--'
+<parameter> =
+      '#' <integer>
+    | '#' <initial-param-char> <param-char>*
+    | '#' '<' <initial-param-char> <param-char>* '>'
+<expr> =
+      <parameter>
+    | '[' <sub-expr> ']'
+    | <integer>
+<sub-expr> =
+      <integer>
+    | '-' <sub-expr>
+    | '!' <sub-expr>
+    | '[' <sub-expr> ']'
+    | <sub-expr> <op> <sub-expr>
+    | <parameter>
+    | <func> '[' [<sub-expr> [',' ...]] ']'
+<op> = '+' '-' '*' '/'
+    | '==' '!=' '<' '<=' '>' '>='
+    | '&&' '||'
+<trailing-comment> = (';' | '%') <any-char>*
+<inline-comment> = '(' <any-char>* ')'
+<code> = 'A' ... 'Z' | 'a' ... 'z'
+<initial-param-char> = 'A' ... 'Z' | 'a' ... 'z' | '_'
+<param-char> = <initial-param-char> | '0' ... '9'
+<assign-op> = '=' | '-=' | '+=' | '*=' | '/='
+<whitespace> = ' ' | '\t'
+<any-char> = any character except '\r' or '\n'
+
+To Do:
+- <integer> -> <number> in most places
+- <command> = <code> <expr> ['.' <expr>]
+- RepRap: support {} instead of [] for expressions
+- ignore spaces & tabs when parsing <code> <expr>
+- LinuxCNC: don't apply assignments until entire line is parsed
+- BeagleG: assignements take effect immediately
+- make sure G##2 works
+- #param is BeagleG only (as compared to #<param>
+- _ prefix for global parameter names
+- add strings and parameter names as parts of expressions
+*/
+
 import (
 	"fmt"
 	"io"
@@ -11,8 +68,17 @@ import (
 type Code byte
 type Number float64
 
+type Dialect int
+
+const (
+	BeagleG Dialect = iota
+	RepRap
+	LinuxCNC
+)
+
 type Parser struct {
 	Scanner io.ByteScanner
+	Dialect Dialect
 
 	// LineEndComment is called when line end comments are parsed: start with ; and %.
 	LineEndComment func(comment string) error
@@ -457,19 +523,6 @@ func (p *Parser) parseNumber() expression {
 	}
 	return Number(n)
 }
-
-/*
-<expr> = <num>
-    | '-' <expr>
-    | '!' <expr>
-    | '[' <expr> ']'
-    | <expr> <op> <expr>
-    | '#' <param>
-    | <func> '[' [<expr> [',' ...]] ']'
-<op> = '+' '-' '*' '/'
-    | '==' '!=' '<' '<=' '>' '>='
-    | '&&' '||'
-*/
 
 func (p *Parser) parseSubExpr() expression {
 	p.skipWhitespace()

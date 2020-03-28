@@ -68,6 +68,7 @@ func TestParser(t *testing.T) {
 	for i, c := range cases {
 		p := Parser{
 			Scanner: strings.NewReader(c.s),
+			Dialect: BeagleG,
 		}
 		for _, cmd := range c.cmds {
 			code, num, err := p.Parse()
@@ -117,6 +118,7 @@ func TestParseParameter(t *testing.T) {
 		{s: "#abc ", name: "abc"},
 		{s: "#abc_123 ", name: "abc_123"},
 		{s: "#<abc>", name: "abc"},
+		{s: "#<abc123>", name: "abc123"},
 		{s: "#<abc ", fail: true},
 		{s: "#$$$ ", fail: true},
 		{s: "#123456789 ", fail: true},
@@ -125,6 +127,7 @@ func TestParseParameter(t *testing.T) {
 	for _, c := range cases {
 		p := Parser{
 			Scanner: strings.NewReader(c.s),
+			Dialect: BeagleG,
 		}
 		b, err := p.Scanner.ReadByte()
 		if b != '#' {
@@ -184,6 +187,7 @@ func TestParseAssignOp(t *testing.T) {
 	for _, c := range cases {
 		p := Parser{
 			Scanner: strings.NewReader(c.s),
+			Dialect: BeagleG,
 		}
 		assignOp, err := parseAssignOp(&p)
 		if c.fail {
@@ -231,6 +235,7 @@ func TestParseNameAssignment(t *testing.T) {
 	for _, c := range cases {
 		p := Parser{
 			Scanner: strings.NewReader(c.s),
+			Dialect: BeagleG,
 		}
 		_, _, err := p.Parse()
 		if c.fail {
@@ -290,6 +295,7 @@ func TestParseNumAssignment(t *testing.T) {
 	s := "#1=1\nG10\n"
 	p := Parser{
 		Scanner: strings.NewReader(s),
+		Dialect: BeagleG,
 	}
 	_, _, err := p.Parse()
 	if err == nil {
@@ -299,6 +305,7 @@ func TestParseNumAssignment(t *testing.T) {
 	s = "G#1\n"
 	p = Parser{
 		Scanner: strings.NewReader(s),
+		Dialect: BeagleG,
 	}
 	_, _, err = p.Parse()
 	if err == nil {
@@ -309,6 +316,7 @@ func TestParseNumAssignment(t *testing.T) {
 		numParams := map[int]Number{}
 		p := Parser{
 			Scanner: strings.NewReader(c.s),
+			Dialect: BeagleG,
 			GetNumParam: func(num int) (Number, error) {
 				if num == 666 {
 					return 0, errors.New("failed")
@@ -367,6 +375,7 @@ func TestParseComments(t *testing.T) {
 		var lineEnd, parsed, executed bool
 		p := Parser{
 			Scanner: strings.NewReader(c.s),
+			Dialect: BeagleG,
 			LineEndComment: func(comment string) error {
 				if comment == "fail" {
 					return errors.New("failed")
@@ -446,6 +455,7 @@ func TestParameters(t *testing.T) {
 
 		{s: "#999=22\nG#999\n", code: 'G', num: 22},
 		{s: "G#888\n", fail: true},
+		//		{s: "#1=2 #2=3\nG##1\n", code: 'G', num: 3},
 
 		{s: "#abc=10\n*#abc ", fail: true},
 		{s: "#abc=10\nN#abc ", fail: true},
@@ -455,6 +465,7 @@ func TestParameters(t *testing.T) {
 		numParams := map[int]Number{}
 		p := Parser{
 			Scanner: strings.NewReader(c.s),
+			Dialect: BeagleG,
 			GetNumParam: func(num int) (Number, error) {
 				val, ok := numParams[num]
 				if !ok {
@@ -641,6 +652,7 @@ func TestExpressions(t *testing.T) {
 	for _, c := range cases {
 		p := Parser{
 			Scanner: strings.NewReader(c.s),
+			Dialect: BeagleG,
 			GetNumParam: func(num int) (Number, error) {
 				if num < 100 {
 					return Number(num) + 100, nil
