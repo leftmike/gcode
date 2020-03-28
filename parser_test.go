@@ -24,7 +24,6 @@ func TestParser(t *testing.T) {
 		{s: "G10\n", cmds: []cmd{{'G', 10}}},
 		{s: "g10\n", cmds: []cmd{{'G', 10}}},
 		{s: " G 10\n", cmds: []cmd{{'G', 10}}},
-		{s: "G\n10\n", cmds: []cmd{{'G', 10}}},
 		{s: "(comment)G10\n", cmds: []cmd{{'G', 10}}},
 		{s: "(comment) G10\n", cmds: []cmd{{'G', 10}}},
 		{s: "(comment\n) G10\n", fail: true},
@@ -452,6 +451,7 @@ func TestParameters(t *testing.T) {
 		fail bool
 		code Code
 		num  Number
+		d    Dialect
 	}{
 		{s: "#abc=11\nG#abc\n", code: 'G', num: 11},
 		{s: "G#abc\n", fail: true},
@@ -464,6 +464,9 @@ func TestParameters(t *testing.T) {
 
 		{s: "#abc=<def> #def=11\nG##abc\n", code: 'G', num: 11},
 
+		{s: "#abc=1\n#abc=2 G#abc\n", code: 'G', num: 2, d: BeagleG},
+		{s: "#<abc>=1\n#<abc>=2 G#<abc>\n", code: 'G', num: 1, d: LinuxCNC},
+
 		{s: "#abc=10\n*#abc ", fail: true},
 		{s: "#abc=10\nN#abc ", fail: true},
 	}
@@ -472,7 +475,7 @@ func TestParameters(t *testing.T) {
 		numParams := map[int]Number{}
 		p := Parser{
 			Scanner: strings.NewReader(c.s),
-			Dialect: BeagleG,
+			Dialect: c.d,
 			GetNumParam: func(num int) (Number, error) {
 				val, ok := numParams[num]
 				if !ok {
@@ -727,11 +730,13 @@ func TestValues(t *testing.T) {
 		{s: `"abc"`, v: String("abc")},
 		{s: `"abc`, pfail: true},
 		{s: `"abc\"def"`, v: String(`abc"def`)},
+		{s: "abc\ndef", pfail: true},
 
 		{s: "<abc>", v: Name("abc")},
 		{s: "<123>", v: Name("123")},
 		{s: "<>", pfail: true},
 		{s: `<abc"`, pfail: true},
+		{s: "<abc\ndef>", pfail: true},
 	}
 
 	for _, c := range cases {
