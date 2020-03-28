@@ -4,8 +4,8 @@ package gcode
 BeagleG Dialect:
 
 <line> = <prefix> <body> <suffix> ('\r' | '\n')
-<prefix> = (<whitespace> | <inline-comment>)* ['N' <integer>]
-<suffix> = ['*' <integer> <whitespace>*] [<trailing-comment>]
+<prefix> = (<whitespace> | <inline-comment>)* ['N' <number>]
+<suffix> = ['*' <number> <whitespace>*] [<trailing-comment>]
 <body> =
       (<whitespace> | <inline-comment> | <command> | <assignment>)*
     | 'IF' <expr> 'THEN' <assignment> ('ELSEIF' <expr> 'THEN' <assignment>)* ['ELSE' <assignment>]
@@ -14,39 +14,43 @@ BeagleG Dialect:
 <command> = <code> <expr>
 <assignment> =
       <parameter> <whitespace>* <assign-op> <whitespace>* <expr>
-    | <parameter> '++'
-    | <parameter> '--'
+    | <parameter> <whitespace>* '++'
+    | <parameter> <whitespace>* '--'
 <parameter> =
       '#' <integer>
-    | '#' <initial-param-char> <param-char>*
-    | '#' '<' <initial-param-char> <param-char>* '>'
+    | '#' <initial-name-char> <name-char>*
+    | '#' <name>
 <expr> =
-      <parameter>
+      <reference>
     | '[' <sub-expr> ']'
-    | <integer>
+    | <number>
+    | <name>
+    | <string>
 <sub-expr> =
-      <integer>
+      <number>
     | '-' <sub-expr>
     | '!' <sub-expr>
     | '[' <sub-expr> ']'
     | <sub-expr> <op> <sub-expr>
-    | <parameter>
+    | <reference>
+    | <name>
+    | <string>
     | <func> '[' [<sub-expr> [',' ...]] ']'
 <op> = '+' '-' '*' '/'
     | '==' '!=' '<' '<=' '>' '>='
     | '&&' '||'
+<reference> = '#'* <parameter>
 <trailing-comment> = (';' | '%') <any-char>*
 <inline-comment> = '(' <any-char>* ')'
 <code> = 'A' ... 'Z' | 'a' ... 'z'
-<initial-param-char> = 'A' ... 'Z' | 'a' ... 'z' | '_'
-<param-char> = <initial-param-char> | '0' ... '9'
+<name> = '<' <name-char>+ '>'
+<initial-name-char> = 'A' ... 'Z' | 'a' ... 'z' | '_'
+<name-char> = <initial-name-char> | '0' ... '9'
 <assign-op> = '=' | '-=' | '+=' | '*=' | '/='
 <whitespace> = ' ' | '\t'
 <any-char> = any character except '\r' or '\n'
 
 To Do:
-- <integer> -> <number> in most places
-- <command> = <code> <expr> ['.' <expr>]
 - RepRap: support {} instead of [] for expressions
 - ignore spaces & tabs when parsing <code> <expr>
 - LinuxCNC: don't apply assignments until entire line is parsed
