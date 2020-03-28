@@ -64,6 +64,7 @@ func TestParser(t *testing.T) {
 		{s: "N9999999999999999 G10\n", fail: true},
 		{s: "*123 G10\n", fail: true},
 		{s: "*123 WHILE\n", fail: true},
+		{s: "    G10X1Y 2Z3\n", cmds: []cmd{{'G', 10}, {'X', 1}, {'Y', 2}, {'Z', 3}}},
 	}
 
 	for i, c := range cases {

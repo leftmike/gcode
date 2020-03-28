@@ -1,7 +1,13 @@
 package gcode
 
 /*
-BeagleG Dialect:
+To Do:
+- RepRap: support {} instead of [] for expressions
+- LinuxCNC: don't apply assignments until entire line is parsed
+- BeagleG: assignements take effect immediately
+- _ prefix for global parameter names
+- change Parse() to return a Value rather than a Number
+- parse needs to return an end of line marker
 
 <line> = <prefix> <body> <suffix> ('\r' | '\n')
 <prefix> = (<whitespace> | <inline-comment>)* ['N' <number>]
@@ -9,7 +15,8 @@ BeagleG Dialect:
 <body> =
       (<whitespace> | <inline-comment> | <command> | <assignment>)*
     | 'IF' <expr> 'THEN' <assignment> ('ELSEIF' <expr> 'THEN' <assignment>)* ['ELSE' <assignment>]
-    | <while>
+        ;; BeagleG
+    | <while> ;; BeagleG
 <while> = 'WHILE' <expr> 'DO' <suffix> <line>* <suffix> 'END'
 <command> = <code> <expr>
 <assignment> =
@@ -18,7 +25,7 @@ BeagleG Dialect:
     | <parameter> <whitespace>* '--'
 <parameter> =
       '#' <integer>
-    | '#' <initial-name-char> <name-char>*
+    | '#' <initial-name-char> <name-char>* ;; BeagleG
     | '#' <name>
 <expr> =
       <reference>
@@ -49,15 +56,6 @@ BeagleG Dialect:
 <assign-op> = '=' | '-=' | '+=' | '*=' | '/='
 <whitespace> = ' ' | '\t'
 <any-char> = any character except '\r' or '\n'
-
-To Do:
-- RepRap: support {} instead of [] for expressions
-- ignore spaces & tabs when parsing <code> <expr>
-- LinuxCNC: don't apply assignments until entire line is parsed
-- BeagleG: assignements take effect immediately
-- #param is BeagleG only (as compared to #<param>
-- _ prefix for global parameter names
-- change command to be an interface
 */
 
 import (
@@ -117,12 +115,10 @@ type expression interface {
 	evaluate(p *Parser) Value
 }
 
-type commandType byte
+type keywordType byte
 
 const (
-	assignmentType commandType = iota + 1
-	commentType
-	whileKeyword
+	whileKeyword keywordType = iota + 1
 	doKeyword
 	endKeyword
 	ifKeyword
@@ -130,8 +126,9 @@ const (
 	elseKeyword
 	elseifKeyword
 
-	firstCodeType commandType = 'A'
-	lastCodeType  commandType = 'Z'
+	nilCode   Code = 0
+	firstCode Code = 'A'
+	lastCode  Code = 'Z'
 )
 
 type assignOp byte
@@ -146,16 +143,8 @@ const (
 	minusMinus
 )
 
-type command struct {
-	typ       commandType
-	assignOp  assignOp
-	expr      expression
-	intVal    int    // num parameter
-	stringVal string // name parameter
-}
-
 var (
-	keywordMap = map[string]commandType{
+	keywordMap = map[string]keywordType{
 		"WHILE":  whileKeyword,
 		"DO":     doKeyword,
 		"END":    endKeyword,
@@ -435,29 +424,15 @@ func (p *Parser) Parse() (code Code, num Number, err error) {
 		}
 	}()
 
+	var endFuncs []endFunc
 	for {
-		var cmd command
-		p.parse(&cmd)
-		if cmd.typ >= firstCodeType && cmd.typ <= lastCodeType {
-			// Codes
+		act := p.parse()
 
-			num := p.wantNumber(cmd.expr.evaluate(p))
-			return Code(cmd.typ), num, nil
-		} else if cmd.typ == assignmentType {
-			// Assignments
-
-			p.evaluateAssignment(&cmd)
-		} else if cmd.typ == commentType {
-			// Inline Comments
-
-			err = p.InlineExecuted(cmd.intVal, cmd.stringVal)
-			if err != nil {
-				p.error(err.Error())
-			}
-		} else {
-			// Keywords
-
-			p.error(fmt.Sprintf("keyword %d not implemented", cmd.typ)) // XXX
+		var code Code
+		var val Value
+		code, val, endFuncs = act.evaluate(p, endFuncs)
+		if code >= firstCode && code <= lastCode {
+			return code, p.wantNumber(val), nil
 		}
 	}
 }
@@ -902,7 +877,7 @@ func (p *Parser) parseParameter() (int, string) {
 
 		p.Scanner.UnreadByte()
 		return num, ""
-	} else if nameByte(b) || b == '<' {
+	} else if (p.Dialect == BeagleG && nameByte(b)) || b == '<' {
 		var delim bool
 		if b == '<' {
 			delim = true
@@ -1007,100 +982,153 @@ func (p *Parser) parseAssignOp() assignOp {
 	return 0
 }
 
-func (p *Parser) evaluateAssignment(cmd *command) {
-	val := cmd.expr.evaluate(p)
-
-	if cmd.stringVal == "" {
-		if p.GetNumParam == nil || p.SetNumParam == nil {
-			p.error("number parameters not supported")
-		}
-		val := p.wantNumber(val)
-
-		switch cmd.assignOp {
-		case assign:
-			err := p.SetNumParam(cmd.intVal, val)
-			if err != nil {
-				p.error(err.Error())
-			}
-		case assignPlus, plusPlus:
-			cur, err := p.GetNumParam(cmd.intVal)
-			if err != nil {
-				p.error(err.Error())
-			}
-			err = p.SetNumParam(cmd.intVal, cur+val)
-			if err != nil {
-				p.error(err.Error())
-			}
-		case assignMinus, minusMinus:
-			cur, err := p.GetNumParam(cmd.intVal)
-			if err != nil {
-				p.error(err.Error())
-			}
-			err = p.SetNumParam(cmd.intVal, cur-val)
-			if err != nil {
-				p.error(err.Error())
-			}
-		case assignTimes:
-			cur, err := p.GetNumParam(cmd.intVal)
-			if err != nil {
-				p.error(err.Error())
-			}
-			err = p.SetNumParam(cmd.intVal, cur*val)
-			if err != nil {
-				p.error(err.Error())
-			}
-		case assignDivide:
-			cur, err := p.GetNumParam(cmd.intVal)
-			if err != nil {
-				p.error(err.Error())
-			}
-			err = p.SetNumParam(cmd.intVal, cur/val)
-			if err != nil {
-				p.error(err.Error())
-			}
-		default:
-			panic(fmt.Sprintf("unexpected assign op: %d", cmd.assignOp))
-		}
-	} else {
-		if p.nameParams == nil {
-			p.nameParams = map[Name]Value{}
-		}
-		name := Name(cmd.stringVal)
-
-		switch cmd.assignOp {
-		case assign:
-			p.nameParams[name] = val
-		case assignPlus, plusPlus:
-			cur, ok := p.nameParams[name]
-			if !ok {
-				p.error(fmt.Sprintf("undefined name parameter: %s", name))
-			}
-			p.nameParams[name] = p.wantNumber(cur) + p.wantNumber(val)
-		case assignMinus, minusMinus:
-			cur, ok := p.nameParams[name]
-			if !ok {
-				p.error(fmt.Sprintf("undefined name parameter: %s", name))
-			}
-			p.nameParams[name] = p.wantNumber(cur) - p.wantNumber(val)
-		case assignTimes:
-			cur, ok := p.nameParams[name]
-			if !ok {
-				p.error(fmt.Sprintf("undefined name parameter: %s", name))
-			}
-			p.nameParams[name] = p.wantNumber(cur) * p.wantNumber(val)
-		case assignDivide:
-			cur, ok := p.nameParams[name]
-			if !ok {
-				p.error(fmt.Sprintf("undefined name parameter: %s", name))
-			}
-			p.nameParams[name] = p.wantNumber(cur) / p.wantNumber(val)
-		default:
-			panic(fmt.Sprintf("unexpected assign op: %d", cmd.assignOp))
-		}
-	}
+type codeAction struct {
+	code Code
+	expr expression
 }
 
-func (p *Parser) parse(cmd *command) {
+func (ca codeAction) evaluate(p *Parser, endFuncs []endFunc) (Code, Value, []endFunc) {
+	return ca.code, ca.expr.evaluate(p), endFuncs
+}
+
+type numAssignAction struct {
+	num      int
+	assignOp assignOp
+	expr     expression
+}
+
+func (naa numAssignAction) evaluate(p *Parser, endFuncs []endFunc) (Code, Value, []endFunc) {
+	val := p.wantNumber(naa.expr.evaluate(p))
+
+	if p.GetNumParam == nil || p.SetNumParam == nil {
+		p.error("number parameters not supported")
+	}
+
+	switch naa.assignOp {
+	case assign:
+		err := p.SetNumParam(naa.num, val)
+		if err != nil {
+			p.error(err.Error())
+		}
+	case assignPlus, plusPlus:
+		cur, err := p.GetNumParam(naa.num)
+		if err != nil {
+			p.error(err.Error())
+		}
+		err = p.SetNumParam(naa.num, cur+val)
+		if err != nil {
+			p.error(err.Error())
+		}
+	case assignMinus, minusMinus:
+		cur, err := p.GetNumParam(naa.num)
+		if err != nil {
+			p.error(err.Error())
+		}
+		err = p.SetNumParam(naa.num, cur-val)
+		if err != nil {
+			p.error(err.Error())
+		}
+	case assignTimes:
+		cur, err := p.GetNumParam(naa.num)
+		if err != nil {
+			p.error(err.Error())
+		}
+		err = p.SetNumParam(naa.num, cur*val)
+		if err != nil {
+			p.error(err.Error())
+		}
+	case assignDivide:
+		cur, err := p.GetNumParam(naa.num)
+		if err != nil {
+			p.error(err.Error())
+		}
+		err = p.SetNumParam(naa.num, cur/val)
+		if err != nil {
+			p.error(err.Error())
+		}
+	default:
+		panic(fmt.Sprintf("unexpected assign op: %d", naa.assignOp))
+	}
+
+	return nilCode, nil, endFuncs
+}
+
+type nameAssignAction struct {
+	name     Name
+	assignOp assignOp
+	expr     expression
+}
+
+func (naa nameAssignAction) evaluate(p *Parser, endFuncs []endFunc) (Code, Value, []endFunc) {
+	val := naa.expr.evaluate(p)
+
+	if p.nameParams == nil {
+		p.nameParams = map[Name]Value{}
+	}
+
+	switch naa.assignOp {
+	case assign:
+		p.nameParams[naa.name] = val
+	case assignPlus, plusPlus:
+		cur, ok := p.nameParams[naa.name]
+		if !ok {
+			p.error(fmt.Sprintf("undefined name parameter: %s", naa.name))
+		}
+		p.nameParams[naa.name] = p.wantNumber(cur) + p.wantNumber(val)
+	case assignMinus, minusMinus:
+		cur, ok := p.nameParams[naa.name]
+		if !ok {
+			p.error(fmt.Sprintf("undefined name parameter: %s", naa.name))
+		}
+		p.nameParams[naa.name] = p.wantNumber(cur) - p.wantNumber(val)
+	case assignTimes:
+		cur, ok := p.nameParams[naa.name]
+		if !ok {
+			p.error(fmt.Sprintf("undefined name parameter: %s", naa.name))
+		}
+		p.nameParams[naa.name] = p.wantNumber(cur) * p.wantNumber(val)
+	case assignDivide:
+		cur, ok := p.nameParams[naa.name]
+		if !ok {
+			p.error(fmt.Sprintf("undefined name parameter: %s", naa.name))
+		}
+		p.nameParams[naa.name] = p.wantNumber(cur) / p.wantNumber(val)
+	default:
+		panic(fmt.Sprintf("unexpected assign op: %d", naa.assignOp))
+	}
+
+	return nilCode, nil, endFuncs
+}
+
+type commentAction struct {
+	intVal    int
+	stringVal string
+}
+
+func (ca commentAction) evaluate(p *Parser, endFuncs []endFunc) (Code, Value, []endFunc) {
+	err := p.InlineExecuted(ca.intVal, ca.stringVal)
+	if err != nil {
+		p.error(err.Error())
+	}
+	return nilCode, nil, endFuncs
+}
+
+type keywordAction struct {
+	keyword keywordType
+}
+
+func (ka keywordAction) evaluate(p *Parser, endFuncs []endFunc) (Code, Value, []endFunc) {
+	p.error(fmt.Sprintf("keyword %d not implemented", ka.keyword)) // XXX
+
+	return nilCode, nil, endFuncs
+}
+
+type endFunc func(p *Parser)
+type action interface {
+	evaluate(p *Parser, endFuncs []endFunc) (Code, Value, []endFunc)
+}
+
+func (p *Parser) parse() action {
 	for {
 		p.skipWhitespace()
 		b := upcaseByte(p.readByte())
@@ -1144,10 +1172,7 @@ func (p *Parser) parse(cmd *command) {
 					p.error(err.Error())
 				}
 				if p.InlineExecuted != nil && (i != 0 || s != "") {
-					cmd.typ = commentType
-					cmd.intVal = i
-					cmd.stringVal = s
-					break
+					return commentAction{intVal: i, stringVal: s}
 				}
 			}
 		} else if b == '*' {
@@ -1160,18 +1185,20 @@ func (p *Parser) parse(cmd *command) {
 			if p.sawChecksum {
 				p.error("checksum (*nnn) must be at end of line")
 			}
-
-			cmd.typ = assignmentType
-			cmd.intVal, cmd.stringVal = p.parseParameter()
-			cmd.assignOp = p.parseAssignOp()
-			if cmd.assignOp == plusPlus || cmd.assignOp == minusMinus {
-				cmd.expr = Number(1)
-			} else {
-				cmd.expr = p.parseExpr()
-			}
-
 			p.withinLine = true
-			break
+
+			num, name := p.parseParameter()
+			assignOp := p.parseAssignOp()
+			var expr expression
+			if assignOp == plusPlus || assignOp == minusMinus {
+				expr = Number(1)
+			} else {
+				expr = p.parseExpr()
+			}
+			if name == "" {
+				return numAssignAction{num: num, assignOp: assignOp, expr: expr}
+			}
+			return nameAssignAction{name: Name(name), assignOp: assignOp, expr: expr}
 		} else if b < 'A' || b > 'Z' {
 			p.error(fmt.Sprintf("unexpected command: %d", b))
 		} else if kw := p.parseSymbol(b); kw != "" {
@@ -1182,10 +1209,9 @@ func (p *Parser) parse(cmd *command) {
 			if typ, ok := keywordMap[kw]; !ok {
 				p.error(fmt.Sprintf("unexpected keyword: %s", kw))
 			} else {
-				cmd.typ = typ
-
 				p.withinLine = true
-				break
+
+				return keywordAction{keyword: typ}
 			}
 		} else if b == 'N' {
 			// Parse Nnnn.
@@ -1202,16 +1228,13 @@ func (p *Parser) parse(cmd *command) {
 
 			p.withinLine = true
 		} else {
-			// Parse all the other codes (A to Z except N).
-			cmd.typ = commandType(b)
-
 			if p.sawChecksum {
 				p.error("checksum (*nnn) must be at end of line")
 			}
-
-			cmd.expr = p.parseExpr()
 			p.withinLine = true
-			break
+
+			// Parse all the other codes (A to Z except N).
+			return codeAction{code: Code(b), expr: p.parseExpr()}
 		}
 	}
 }
