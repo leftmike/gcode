@@ -4,7 +4,6 @@ package gcode
 To Do:
 - RepRap: support {} instead of [] for expressions
 - _ prefix for global parameter names
-- change Parse() to return a Value rather than a Number
 
 <line> = <prefix> <body> <suffix> ('\r' | '\n')
 <prefix> = (<whitespace> | <inline-comment>)* ['N' <number>]
@@ -411,7 +410,7 @@ func (c *call) evaluate(p *Parser) Value {
 	return c.fn(p, args)
 }
 
-func (p *Parser) Parse() (code Code, num Number, err error) {
+func (p *Parser) Parse() (code Code, val Value, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if _, ok := r.(runtime.Error); ok {
@@ -419,7 +418,7 @@ func (p *Parser) Parse() (code Code, num Number, err error) {
 			}
 			err = r.(error)
 			code = 0
-			num = 0
+			val = nil
 		}
 	}()
 
@@ -431,7 +430,7 @@ func (p *Parser) Parse() (code Code, num Number, err error) {
 		var val Value
 		code, val, endFuncs = act.evaluate(p, endFuncs)
 		if code >= firstCode && code <= lastCode {
-			return code, p.wantNumber(val), nil
+			return code, val, nil
 		}
 	}
 }
