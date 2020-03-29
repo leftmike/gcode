@@ -100,12 +100,20 @@ type Parser struct {
 	// SetNumParam sets the value of a number parameter.
 	SetNumParam func(num int, val Number) error
 
-	withinLine   bool // Used to validate that Nnnn is at the beginning of a line
-	sawChecksum  bool // Used to validate that *nnn is at the end of a line
-	physicalLine int  // Count of lines
-	virtualLine  int  // Lines as tracked by Nnnn
+	lineState    lineState
+	physicalLine int // Count of lines
+	virtualLine  int // Lines as tracked by Nnnn
 	nameParams   map[Name]Value
 }
+
+type lineState byte
+
+const (
+	beforeLineNum lineState = iota // Before Nnnn.
+	afterLineNum                   // After Nnnn.
+	inBody                         // After a code or an assignment is parsed.
+	afterChecksum                  // After *nnn at the end of the line.
+)
 
 type endFunc func(p *Parser)
 
@@ -117,17 +125,7 @@ type expression interface {
 	evaluate(p *Parser) Value
 }
 
-type keywordType byte
-
 const (
-	whileKeyword keywordType = iota + 1
-	doKeyword
-	endKeyword
-	ifKeyword
-	thenKeyword
-	elseKeyword
-	elseifKeyword
-
 	nilCode   Code = 0
 	firstCode Code = 'A'
 	lastCode  Code = 'Z'
@@ -146,16 +144,6 @@ const (
 )
 
 var (
-	keywordMap = map[string]keywordType{
-		"WHILE":  whileKeyword,
-		"DO":     doKeyword,
-		"END":    endKeyword,
-		"IF":     ifKeyword,
-		"THEN":   thenKeyword,
-		"ELSE":   elseKeyword,
-		"ELSEIF": elseifKeyword,
-	}
-
 	opPrecedence = [...]int{
 		orOp:           1,
 		andOp:          2,
@@ -1128,11 +1116,11 @@ func (ca commentAction) evaluate(p *Parser, endFuncs []endFunc) (Code, Value, []
 }
 
 type keywordAction struct {
-	keyword keywordType
+	keyword string
 }
 
 func (ka keywordAction) evaluate(p *Parser, endFuncs []endFunc) (Code, Value, []endFunc) {
-	p.error(fmt.Sprintf("keyword %d not implemented", ka.keyword)) // XXX
+	p.error(fmt.Sprintf("keyword %s not implemented", ka.keyword)) // XXX
 
 	return nilCode, nil, endFuncs
 }
@@ -1152,8 +1140,7 @@ func (p *Parser) parse() action {
 		b := upcaseByte(p.readByte())
 
 		if b == '\n' || b == '\r' {
-			p.withinLine = false
-			p.sawChecksum = false
+			p.lineState = beforeLineNum
 			p.physicalLine += 1
 			p.virtualLine += 1
 
@@ -1163,8 +1150,7 @@ func (p *Parser) parse() action {
 			for {
 				b := p.readByte()
 				if b == '\n' || b == '\r' {
-					p.withinLine = false
-					p.sawChecksum = false
+					p.lineState = beforeLineNum
 					p.physicalLine += 1
 					p.virtualLine += 1
 					break
@@ -1206,13 +1192,12 @@ func (p *Parser) parse() action {
 			// Parse and ignore *nnn; check it is the last command on the line.
 
 			p.wantInteger()
-			p.sawChecksum = true
-			p.withinLine = true
+			p.lineState = afterChecksum
 		} else if b == '#' {
-			if p.sawChecksum {
+			if p.lineState == afterChecksum {
 				p.error("checksum (*nnn) must be at end of line")
 			}
-			p.withinLine = true
+			p.lineState = inBody
 
 			num, name := p.parseParameter()
 			assignOp := p.parseAssignOp()
@@ -1229,21 +1214,19 @@ func (p *Parser) parse() action {
 		} else if b < 'A' || b > 'Z' {
 			p.error(fmt.Sprintf("unexpected command: %d", b))
 		} else if kw := p.parseSymbol(b); kw != "" {
-			if p.sawChecksum {
+			if p.lineState == afterChecksum {
 				p.error("checksum (*nnn) must be at end of line")
 			}
-
-			if typ, ok := keywordMap[kw]; !ok {
-				p.error(fmt.Sprintf("unexpected keyword: %s", kw))
-			} else {
-				p.withinLine = true
-
-				return keywordAction{keyword: typ}
+			if p.lineState == inBody {
+				p.error("keyword must first on line")
 			}
+			p.lineState = inBody
+
+			return keywordAction{keyword: kw}
 		} else if b == 'N' {
 			// Parse Nnnn.
 
-			if p.withinLine {
+			if p.lineState != beforeLineNum {
 				p.error("N code must be first on line")
 			}
 
@@ -1253,12 +1236,12 @@ func (p *Parser) parse() action {
 			}
 			p.virtualLine = num - 1
 
-			p.withinLine = true
+			p.lineState = afterLineNum
 		} else {
-			if p.sawChecksum {
+			if p.lineState == afterChecksum {
 				p.error("checksum (*nnn) must be at end of line")
 			}
-			p.withinLine = true
+			p.lineState = inBody
 
 			// Parse all the other codes (A to Z except N).
 			return codeAction{code: Code(b), expr: p.parseExpr()}
