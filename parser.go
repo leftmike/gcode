@@ -1178,6 +1178,8 @@ func (p *Parser) parse() action {
 					p.error(err.Error())
 				}
 			}
+
+			return eolAction{}
 		} else if b == '(' {
 			var bytes []byte
 			for {

@@ -466,6 +466,8 @@ func TestParameters(t *testing.T) {
 
 		{s: "#abc=1\n#abc=2 G#abc\n", code: 'G', num: 2, d: BeagleG},
 		{s: "#<abc>=1\n#<abc>=2 G#<abc>\n", code: 'G', num: 1, d: LinuxCNC},
+		{s: "#1=1\n#1=2 % comment\nG#1\n", code: 'G', num: 2, d: BeagleG},
+		{s: "#1=1\n#1=2 % comment\nG#1\n", code: 'G', num: 2, d: LinuxCNC},
 
 		{s: "#abc=10\n*#abc ", fail: true},
 		{s: "#abc=10\nN#abc ", fail: true},
