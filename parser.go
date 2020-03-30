@@ -4,16 +4,20 @@ package gcode
 To Do:
 - RepRap: support {} instead of [] for expressions
 - _ prefix for global parameter names
+- LinuxCNC
+-- numbers are equal if their absolute difference is less that 0.0001
+-- #1 to #30 are subroutine parameters and are local to the subroutine
+-- #<name> are local to the scope where it is assigned; scoped to subroutines
+-- #31 + and #<_name> are global
 
 <line> = <prefix> <body> <suffix> ('\r' | '\n')
 <prefix> = (<whitespace> | <inline-comment>)* ['N' <number>]
 <suffix> = ['*' <number> <whitespace>*] [<trailing-comment>]
-<body> =
-      (<whitespace> | <inline-comment> | <command> | <assignment>)*
+<body> = (<whitespace> | <inline-comment> | <command> | <assignment>)*
+<beagleg-body> =
+      <body>
     | 'IF' <expr> 'THEN' <assignment> ('ELSEIF' <expr> 'THEN' <assignment>)* ['ELSE' <assignment>]
-        ;; BeagleG
-    | <while> ;; BeagleG
-<while> = 'WHILE' <expr> 'DO' <suffix> <line>* <suffix> 'END'
+    | 'WHILE' <expr> 'DO' <suffix> <line>* <suffix> 'END'
 <command> = <code> <expr>
 <assignment> =
       <parameter> <whitespace>* <assign-op> <whitespace>* <expr>
@@ -105,6 +109,10 @@ type Parser struct {
 	virtualLine  int // Lines as tracked by Nnnn
 	nameParams   map[Name]Value
 }
+
+const (
+	minimumDelta = 0.0001
+)
 
 type lineState byte
 
@@ -750,12 +758,7 @@ func (p *Parser) parseReference() expression {
 		return param{refs: refs, expr: p.parseExpr()}
 	}
 
-	num, name := p.parseParameter()
-	if name == "" {
-		return param{refs: refs, expr: Number(num)}
-	} else {
-		return param{refs: refs, expr: Name(name)}
-	}
+	return param{refs: refs, expr: p.parseParameter().(expression)}
 }
 
 func (p *Parser) parseExpr() expression {
@@ -839,7 +842,7 @@ func nameByte(b byte) bool {
 	return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9') || b == '_'
 }
 
-func (p *Parser) parseParameter() (int, string) {
+func (p *Parser) parseParameter() Value {
 	b := p.readByte()
 
 	if b >= '0' && b <= '9' {
@@ -856,7 +859,7 @@ func (p *Parser) parseParameter() (int, string) {
 		}
 
 		p.Scanner.UnreadByte()
-		return num, ""
+		return Number(num)
 	} else if (p.Dialect == BeagleG && nameByte(b)) || b == '<' {
 		var delim bool
 		if b == '<' {
@@ -882,11 +885,11 @@ func (p *Parser) parseParameter() (int, string) {
 			p.Scanner.UnreadByte()
 		}
 
-		return 0, string(name)
+		return Name(name)
 	}
 
 	p.error(fmt.Sprintf("expected parameter name or number; got %c", b))
-	return 0, ""
+	return nil
 }
 
 func (p *Parser) parseString() String {
@@ -964,6 +967,96 @@ func (p *Parser) parseAssignOp() assignOp {
 
 	p.error("expected an assignment operator (=, +=, -=, *=, /=, ++, --)")
 	return 0
+}
+
+func (p *Parser) parseAssignment() action {
+	param := p.parseParameter()
+	assignOp := p.parseAssignOp()
+	var expr expression
+	if assignOp == plusPlus || assignOp == minusMinus {
+		expr = Number(1)
+	} else {
+		expr = p.parseExpr()
+	}
+	if num, ok := param.(Number); ok {
+		return numAssignAction{num: int(num), assignOp: assignOp, expr: expr}
+	}
+	return nameAssignAction{name: param.(Name), assignOp: assignOp, expr: expr}
+
+}
+
+func (p *Parser) wantEndOfLine() {
+	p.skipWhitespace()
+	b := p.readByte()
+	// XXX: handle end of line comment
+	if b != '\n' && b != '\r' {
+		p.error("expected end of line")
+	}
+}
+
+func (p *Parser) parseExprThenAssignBeagleG() (expression, action) {
+	// <expr> 'THEN' <assignment>
+
+	ifTest := p.parseExpr()
+
+	p.skipWhitespace()
+	b := upcaseByte(p.readByte())
+	if b != 'T' || p.parseSymbol(b) != "THEN" {
+		p.error("expected keyword THEN")
+	}
+
+	p.skipWhitespace()
+	if p.readByte() != '#' {
+		p.error("expected an assignment")
+	}
+	thenAssign := p.parseAssignment()
+
+	return ifTest, thenAssign
+}
+
+func (p *Parser) parseIfBeagleG() action {
+	// 'IF' <expr> 'THEN' <assignment> ('ELSEIF' <expr> 'THEN' <assignment>)* ['ELSE' <assignment>]
+
+	ifTest, thenAssign := p.parseExprThenAssignBeagleG()
+
+	var elseifTests []expression
+	var elseifAssigns []action
+	var elseAssign action
+	for {
+		p.skipWhitespace()
+		b := p.readByte()
+		if b == '\n' || b == '\r' {
+			break
+		}
+		b = upcaseByte(b)
+		if b != 'E' {
+			p.error("expected keyword ELSEIF or ELSE")
+		}
+		kw := p.parseSymbol(b)
+		if kw == "ELSEIF" {
+			test, assign := p.parseExprThenAssignBeagleG()
+			elseifTests = append(elseifTests, test)
+			elseifAssigns = append(elseifAssigns, assign)
+		} else if kw == "ELSE" {
+			p.skipWhitespace()
+			if p.readByte() != '#' {
+				p.error("expected an assignment")
+			}
+			elseAssign = p.parseAssignment()
+			p.wantEndOfLine()
+			break
+		} else {
+			p.error("expected keyword ELSEIF or ELSE")
+		}
+	}
+
+	return ifActionBeagleG{
+		ifTest:        ifTest,
+		thenAssign:    thenAssign,
+		elseifTests:   elseifTests,
+		elseifAssigns: elseifAssigns,
+		elseAssign:    elseAssign,
+	}
 }
 
 type codeAction struct {
@@ -1115,13 +1208,28 @@ func (ca commentAction) evaluate(p *Parser, endFuncs []endFunc) (Code, Value, []
 	return nilCode, nil, endFuncs
 }
 
-type keywordAction struct {
-	keyword string
+type ifActionBeagleG struct {
+	ifTest        expression
+	thenAssign    action
+	elseifTests   []expression
+	elseifAssigns []action
+	elseAssign    action
 }
 
-func (ka keywordAction) evaluate(p *Parser, endFuncs []endFunc) (Code, Value, []endFunc) {
-	p.error(fmt.Sprintf("keyword %s not implemented", ka.keyword)) // XXX
+func (ia ifActionBeagleG) evaluate(p *Parser, endFuncs []endFunc) (Code, Value, []endFunc) {
+	if math.Abs(float64(p.wantNumber(ia.ifTest.evaluate(p)))) >= minimumDelta {
+		return ia.thenAssign.evaluate(p, endFuncs)
+	}
 
+	for edx := range ia.elseifTests {
+		if math.Abs(float64(p.wantNumber(ia.elseifTests[edx].evaluate(p)))) >= minimumDelta {
+			return ia.elseifAssigns[edx].evaluate(p, endFuncs)
+		}
+	}
+
+	if ia.elseAssign != nil {
+		return ia.elseAssign.evaluate(p, endFuncs)
+	}
 	return nilCode, nil, endFuncs
 }
 
@@ -1199,18 +1307,7 @@ func (p *Parser) parse() action {
 			}
 			p.lineState = inBody
 
-			num, name := p.parseParameter()
-			assignOp := p.parseAssignOp()
-			var expr expression
-			if assignOp == plusPlus || assignOp == minusMinus {
-				expr = Number(1)
-			} else {
-				expr = p.parseExpr()
-			}
-			if name == "" {
-				return numAssignAction{num: num, assignOp: assignOp, expr: expr}
-			}
-			return nameAssignAction{name: Name(name), assignOp: assignOp, expr: expr}
+			return p.parseAssignment()
 		} else if b < 'A' || b > 'Z' {
 			p.error(fmt.Sprintf("unexpected command: %d", b))
 		} else if kw := p.parseSymbol(b); kw != "" {
@@ -1218,11 +1315,20 @@ func (p *Parser) parse() action {
 				p.error("checksum (*nnn) must be at end of line")
 			}
 			if p.lineState == inBody {
-				p.error("keyword must first on line")
+				p.error("keyword must come first on line")
 			}
 			p.lineState = inBody
 
-			return keywordAction{keyword: kw}
+			if p.Dialect == BeagleG {
+				switch kw {
+				case "WHILE":
+					// return p.parseWhileBeagleG()
+				case "IF":
+					return p.parseIfBeagleG()
+				}
+			}
+
+			p.error("unexpected keyword")
 		} else if b == 'N' {
 			// Parse Nnnn.
 

@@ -102,7 +102,12 @@ func parseParameter(p *Parser) (num int, nam string, err error) {
 		}
 	}()
 
-	num, nam = p.parseParameter()
+	val := p.parseParameter()
+	if n, ok := val.(Number); ok {
+		num = int(n)
+	} else if s, ok := val.(Name); ok {
+		nam = string(s)
+	}
 	return
 }
 
@@ -329,6 +334,72 @@ func TestParseNumAssignment(t *testing.T) {
 				if num == 777 {
 					return errors.New("failed")
 				}
+				numParams[num] = val
+				return nil
+			},
+		}
+		_, _, err := p.Parse()
+		if c.fail {
+			if err == nil {
+				t.Errorf("Parse(%s) did not fail", c.s)
+			}
+		} else if err != nil {
+			t.Errorf("Parse(%s) failed with %s", c.s, err)
+		} else {
+			val, ok := numParams[c.num]
+			if !ok {
+				t.Errorf("Parse(%s): num parameter %d not found", c.s, c.num)
+			} else if val != c.val {
+				t.Errorf("Parse(%s): got %s want %s", c.s, val, c.val)
+			}
+		}
+	}
+}
+
+func TestParseBeagleGIF(t *testing.T) {
+	cases := []struct {
+		s    string
+		num  int
+		val  Number
+		fail bool
+	}{
+		{s: "#1=0\nIF 1 THEN #1=1\nG1\n", num: 1, val: 1},
+		{s: "#1=0\nIF 0 THEN #1=1\nG1\n", num: 1, val: 0},
+		{s: "#1=1 #2=0\nIF #1 THEN #2=1\nG1\n", num: 2, val: 1},
+		{s: "#1=0 #2=0\nIF #1 THEN #2=1\nG1\n", num: 2, val: 0},
+		{s: "#1=1\nIF #1 THEN #2=1 ELSE #2=2\nG1\n", num: 2, val: 1},
+		{s: "#1=0\nIF #1 THEN #2=1 ELSE #2=2\nG1\n", num: 2, val: 2},
+
+		{s: "IF 0\n", fail: true},
+		{s: "IF 0 THEN\n", fail: true},
+		{s: "IF 0 THEN [1 + 2]\n", fail: true},
+		{s: "IF G1\n", fail: true},
+		{s: "IF 0 THEN #1=1\n", fail: true},
+		{s: "IF 0 THEN #1=1 THEN\n", fail: true},
+
+		{s: "#1=0\nIF 1 THEN #1=1 ELSEIF 1 THEN #1=2 ELSE #1=3\nG1\n", num: 1, val: 1},
+		{s: "#1=0\nIF 0 THEN #1=1 ELSEIF 1 THEN #1=2 ELSE #1=3\nG1\n", num: 1, val: 2},
+		{s: "#1=0\nIF 0 THEN #1=1 ELSEIF 0 THEN #1=2 ELSE #1=3\nG1\n", num: 1, val: 3},
+
+		{s: "#1=0\nIF 1 THEN #1=1 ELSEIF 1 THEN #1=2 ELSEIF 1 THEN #1=3 ELSE #1=4\nG1\n",
+			num: 1, val: 1},
+		{s: "#1=0\nIF 0 THEN #1=1 ELSEIF 1 THEN #1=2 ELSEIF 1 THEN #1=3 ELSE #1=4\nG1\n",
+			num: 1, val: 2},
+		{s: "#1=0\nIF 0 THEN #1=1 ELSEIF 0 THEN #1=2 ELSEIF 1 THEN #1=3 ELSE #1=4\nG1\n",
+			num: 1, val: 3},
+		{s: "#1=0\nIF 0 THEN #1=1 ELSEIF 0 THEN #1=2 ELSEIF 0 THEN #1=3 ELSE #1=4\nG1\n",
+			num: 1, val: 4},
+	}
+
+	for _, c := range cases {
+		numParams := map[int]Number{}
+		p := Parser{
+			Scanner: strings.NewReader(c.s),
+			Dialect: BeagleG,
+			GetNumParam: func(num int) (Number, error) {
+				return numParams[num], nil
+			},
+			SetNumParam: func(num int, val Number) error {
 				numParams[num] = val
 				return nil
 			},
