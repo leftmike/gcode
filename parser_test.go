@@ -356,7 +356,7 @@ func TestParseNumAssignment(t *testing.T) {
 	}
 }
 
-func TestParseBeagleGIF(t *testing.T) {
+func TestParseIfBeagleG(t *testing.T) {
 	cases := []struct {
 		s    string
 		num  int
@@ -389,6 +389,81 @@ func TestParseBeagleGIF(t *testing.T) {
 			num: 1, val: 3},
 		{s: "#1=0\nIF 0 THEN #1=1 ELSEIF 0 THEN #1=2 ELSEIF 0 THEN #1=3 ELSE #1=4\nG1\n",
 			num: 1, val: 4},
+	}
+
+	for _, c := range cases {
+		numParams := map[int]Number{}
+		p := Parser{
+			Scanner: strings.NewReader(c.s),
+			Dialect: BeagleG,
+			GetNumParam: func(num int) (Number, error) {
+				return numParams[num], nil
+			},
+			SetNumParam: func(num int, val Number) error {
+				numParams[num] = val
+				return nil
+			},
+		}
+		_, _, err := p.Parse()
+		if c.fail {
+			if err == nil {
+				t.Errorf("Parse(%s) did not fail", c.s)
+			}
+		} else if err != nil {
+			t.Errorf("Parse(%s) failed with %s", c.s, err)
+		} else {
+			val, ok := numParams[c.num]
+			if !ok {
+				t.Errorf("Parse(%s): num parameter %d not found", c.s, c.num)
+			} else if val != c.val {
+				t.Errorf("Parse(%s): got %s want %s", c.s, val, c.val)
+			}
+		}
+	}
+}
+
+func TestParseWhileBeagleG(t *testing.T) {
+	cases := []struct {
+		s    string
+		num  int
+		val  Number
+		fail bool
+	}{
+		{s: "END\n", fail: true},
+		{s: "WHILE 0\n", fail: true},
+		{s: "WHILE 0 DO G1\n", fail: true},
+		{s: "WHILE 0 DO\n#1=1\n", fail: true},
+		{s: "WHILE DO\n", fail: true},
+		{s: "WHILE 0 DO\n#1=1\nEND G1\n", fail: true},
+		{s: `
+#1=0
+WHILE [#1 < 10] DO
+    #1 += 1
+END
+G1
+`, num: 1, val: 10},
+		{s: `
+#1=0
+#2=1
+WHILE [#1 < 4] DO
+    #1 += 1
+    #2 *= 2
+END
+G1
+`, num: 2, val: 16},
+		{s: `
+#1=0
+#2=0
+WHILE [#2 < 10] DO
+    #3=0
+    WHILE [#3 < 10] DO
+        #1 += 1
+        #3 += 1
+    END
+    #2 += 1
+END
+G1
+`, num: 1, val: 100},
 	}
 
 	for _, c := range cases {

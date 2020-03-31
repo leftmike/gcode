@@ -6,9 +6,13 @@ To Do:
 - _ prefix for global parameter names
 - LinuxCNC
 -- numbers are equal if their absolute difference is less that 0.0001
+   func (n Number) Equal(n2 Number) bool // and use instead of exprTest and in binary ops
 -- #1 to #30 are subroutine parameters and are local to the subroutine
 -- #<name> are local to the scope where it is assigned; scoped to subroutines
 -- #31 + and #<_name> are global
+- move parser*.go to parser/
+- add main.go to parse a file or from stdin
+- add control/control.go which uses parser.Parser
 
 <line> = <prefix> <body> <suffix> ('\r' | '\n')
 <prefix> = (<whitespace> | <inline-comment>)* ['N' <number>]
@@ -108,11 +112,18 @@ type Parser struct {
 	physicalLine int // Count of lines
 	virtualLine  int // Lines as tracked by Nnnn
 	nameParams   map[Name]Value
+	endFuncs     []endFunc
+	stack        *stackFrame
 }
 
 const (
 	minimumDelta = 0.0001
 )
+
+type stackFrame struct {
+	actions []action
+	next    *stackFrame
+}
 
 type lineState byte
 
@@ -418,13 +429,22 @@ func (p *Parser) Parse() (code Code, val Value, err error) {
 		}
 	}()
 
-	var endFuncs []endFunc
 	for {
-		act := p.parse()
+		var act action
+		if p.stack == nil {
+			act = p.parse()
+		} else {
+			sf := p.stack
+			act = sf.actions[0]
+			sf.actions = sf.actions[1:]
+			if len(sf.actions) == 0 {
+				p.stack = sf.next
+			}
+		}
 
 		var code Code
 		var val Value
-		code, val, endFuncs = act.evaluate(p, endFuncs)
+		code, val, p.endFuncs = act.evaluate(p, p.endFuncs)
 		if code >= firstCode && code <= lastCode {
 			return code, val, nil
 		}
@@ -994,8 +1014,46 @@ func (p *Parser) wantEndOfLine() {
 	}
 }
 
+func (p *Parser) parseWhileBeagleG() action {
+	// 'WHILE' <expr> 'DO' <suffix> <line>* <suffix> 'END'
+
+	whileTest := p.parseExpr()
+
+	p.skipWhitespace()
+	b := upcaseByte(p.readByte())
+	if b != 'D' || p.parseSymbol(b) != "DO" {
+		p.error("expected keyword DO")
+	}
+	p.wantEndOfLine()
+
+	var actions []action
+	for {
+		act := p.parse()
+		if _, ok := act.(endActionBeagleG); ok {
+			break
+		}
+		actions = append(actions, act)
+	}
+
+	while := &whileActionBeagleG{
+		whileTest: whileTest,
+	}
+
+	// Add the while action to the end of the loop to start the loop again.
+	actions = append(actions, while)
+	while.actions = actions
+	return while
+}
+
+func (p *Parser) parseEndBeagleG() action {
+	// 'END'
+
+	p.wantEndOfLine()
+	return endActionBeagleG{}
+}
+
 func (p *Parser) parseExprThenAssignBeagleG() (expression, action) {
-	// <expr> 'THEN' <assignment>
+	// ... <expr> 'THEN' <assignment>
 
 	ifTest := p.parseExpr()
 
@@ -1208,6 +1266,30 @@ func (ca commentAction) evaluate(p *Parser, endFuncs []endFunc) (Code, Value, []
 	return nilCode, nil, endFuncs
 }
 
+type whileActionBeagleG struct {
+	whileTest expression
+	actions   []action
+}
+
+func (wa *whileActionBeagleG) evaluate(p *Parser, endFuncs []endFunc) (Code, Value, []endFunc) {
+	if p.exprTest(wa.whileTest) {
+		p.stack = &stackFrame{
+			actions: wa.actions,
+			next:    p.stack,
+		}
+	}
+
+	return nilCode, nil, endFuncs
+}
+
+type endActionBeagleG struct{}
+
+func (ea endActionBeagleG) evaluate(p *Parser, endFuncs []endFunc) (Code, Value, []endFunc) {
+	p.error("unexpected END, no matching WHILE")
+
+	return nilCode, nil, endFuncs
+}
+
 type ifActionBeagleG struct {
 	ifTest        expression
 	thenAssign    action
@@ -1216,8 +1298,12 @@ type ifActionBeagleG struct {
 	elseAssign    action
 }
 
+func (p *Parser) exprTest(expr expression) bool {
+	return math.Abs(float64(p.wantNumber(expr.evaluate(p)))) >= minimumDelta
+}
+
 func (ia ifActionBeagleG) evaluate(p *Parser, endFuncs []endFunc) (Code, Value, []endFunc) {
-	if math.Abs(float64(p.wantNumber(ia.ifTest.evaluate(p)))) >= minimumDelta {
+	if p.exprTest(ia.ifTest) {
 		return ia.thenAssign.evaluate(p, endFuncs)
 	}
 
@@ -1322,7 +1408,9 @@ func (p *Parser) parse() action {
 			if p.Dialect == BeagleG {
 				switch kw {
 				case "WHILE":
-					// return p.parseWhileBeagleG()
+					return p.parseWhileBeagleG()
+				case "END":
+					return p.parseEndBeagleG()
 				case "IF":
 					return p.parseIfBeagleG()
 				}
