@@ -10,8 +10,6 @@ To Do:
 -- #1 to #30 are subroutine parameters and are local to the subroutine
 -- #<name> are local to the scope where it is assigned; scoped to subroutines
 -- #31 + and #<_name> are global
-- move parser*.go to parser/
-- add main.go to parse a file or from stdin
 - add control/control.go which uses parser.Parser
 
 <line> = <prefix> <body> <suffix> ('\r' | '\n')
