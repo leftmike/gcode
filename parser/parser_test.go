@@ -5,65 +5,74 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
 )
 
-type cmd struct {
-	code Code
-	num  Number
+func codesEqual(c1, c2 []Code) bool {
+	if len(c1) != len(c2) {
+		return false
+	}
+
+	for i := range c1 {
+		if c1[i] != c2[i] {
+			return false
+		}
+	}
+
+	return true
 }
 
 func TestParser(t *testing.T) {
 	cases := []struct {
-		s    string
-		fail bool
-		cmds []cmd
+		s     string
+		fail  bool
+		codes []Code
 	}{
-		{s: "G10\n", cmds: []cmd{{'G', 10}}},
-		{s: "g10\n", cmds: []cmd{{'G', 10}}},
-		{s: " G 10\n", cmds: []cmd{{'G', 10}}},
-		{s: "(comment)G10\n", cmds: []cmd{{'G', 10}}},
-		{s: "(comment) G10\n", cmds: []cmd{{'G', 10}}},
+		{s: "G10\n", codes: []Code{{'G', Number(10)}}},
+		{s: "g10\n", codes: []Code{{'G', Number(10)}}},
+		{s: " G 10\n", codes: []Code{{'G', Number(10)}}},
+		{s: "(comment)G10\n", codes: []Code{{'G', Number(10)}}},
+		{s: "(comment) G10\n", codes: []Code{{'G', Number(10)}}},
 		{s: "(comment\n) G10\n", fail: true},
-		{s: "; comment\nG10\n", cmds: []cmd{{'G', 10}}},
-		{s: "% comment\nG10\n", cmds: []cmd{{'G', 10}}},
+		{s: "; comment\nG10\n", codes: []Code{{'G', Number(10)}}},
+		{s: "% comment\nG10\n", codes: []Code{{'G', Number(10)}}},
 		{s: "G;comment\n10\n", fail: true},
 		{s: "G%comment\n10\n", fail: true},
 		{s: "G(comment)10\n", fail: true},
 		{s: "GG\n", fail: true},
 		{s: "$$$\n", fail: true},
-		{s: "G-10\n", cmds: []cmd{{'G', -10}}},
-		{s: "G+10\n", cmds: []cmd{{'G', 10}}},
+		{s: "G-10\n", codes: []Code{{'G', Number(-10)}}},
+		{s: "G+10\n", codes: []Code{{'G', Number(10)}}},
 		{s: "G+\n", fail: true},
 		{s: "G-\n", fail: true},
 		{s: "G+.\n", fail: true},
 		{s: "G-.\n", fail: true},
 		{s: "G.\n", fail: true},
-		{s: "G+0\n", cmds: []cmd{{'G', 0}}},
-		{s: "G-0\n", cmds: []cmd{{'G', 0}}},
-		{s: "G+.0\n", cmds: []cmd{{'G', 0}}},
-		{s: "G-.0\n", cmds: []cmd{{'G', 0}}},
-		{s: "G+0.\n", cmds: []cmd{{'G', 0}}},
-		{s: "G-0.\n", cmds: []cmd{{'G', 0}}},
-		{s: "G0.\n", cmds: []cmd{{'G', 0}}},
-		{s: "G.0\n", cmds: []cmd{{'G', 0}}},
-		{s: "G-10.20\n", cmds: []cmd{{'G', -10.20}}},
-		{s: "G+10.20\n", cmds: []cmd{{'G', 10.20}}},
+		{s: "G+0\n", codes: []Code{{'G', Number(0)}}},
+		{s: "G-0\n", codes: []Code{{'G', Number(0)}}},
+		{s: "G+.0\n", codes: []Code{{'G', Number(0)}}},
+		{s: "G-.0\n", codes: []Code{{'G', Number(0)}}},
+		{s: "G+0.\n", codes: []Code{{'G', Number(0)}}},
+		{s: "G-0.\n", codes: []Code{{'G', Number(0)}}},
+		{s: "G0.\n", codes: []Code{{'G', Number(0)}}},
+		{s: "G.0\n", codes: []Code{{'G', Number(0)}}},
+		{s: "G-10.20\n", codes: []Code{{'G', Number(-10.20)}}},
+		{s: "G+10.20\n", codes: []Code{{'G', Number(10.20)}}},
 
-		{s: "G10 *20\n", cmds: []cmd{{'G', 10}}},
-		{s: "G10 *20 ;comment\nG30\n", cmds: []cmd{{'G', 10}, {'G', 30}}},
-		{s: "G10 *20 G30\n", cmds: []cmd{{'G', 10}}, fail: true},
+		{s: "G10 *20\n", codes: []Code{{'G', Number(10)}}},
+		{s: "G10 G30 *20 ;comment\n", codes: []Code{{'G', Number(10)}, {'G', Number(30)}}},
+		{s: "G10 *20 G30\n", fail: true},
 
-		{s: "N10 G20\n", cmds: []cmd{{'G', 20}}},
-		{s: "G10\nG20\n\nN1 G2\n", fail: true,
-			cmds: []cmd{{'G', 10}, {'G', 20}}},
+		{s: "N10 G20\n", codes: []Code{{'G', Number(20)}}},
 		{s: "N10 G-\n", fail: true},
 		{s: "N9999999999999999 G10\n", fail: true},
 		{s: "*123 G10\n", fail: true},
 		{s: "*123 WHILE\n", fail: true},
-		{s: "    G10X1Y 2Z3\n", cmds: []cmd{{'G', 10}, {'X', 1}, {'Y', 2}, {'Z', 3}}},
+		{s: "    G10X1Y 2Z3\n",
+			codes: []Code{{'G', Number(10)}, {'X', Number(1)}, {'Y', Number(2)}, {'Z', Number(3)}}},
 	}
 
 	for i, c := range cases {
@@ -71,20 +80,65 @@ func TestParser(t *testing.T) {
 			Scanner: strings.NewReader(c.s),
 			Dialect: BeagleG,
 		}
-		for _, cmd := range c.cmds {
-			code, num, err := p.Parse()
-			if err != nil {
-				t.Errorf("Parse(%s) failed with %s", c.s, err)
-			} else if code != cmd.code || num != cmd.num {
-				t.Errorf("Parse(%s)[%d]: got %c%s want %c%s", c.s, i, code, num, cmd.code, cmd.num)
-			}
-		}
-		_, _, err := p.Parse()
+
+		codes, err := p.Parse()
 		if c.fail {
-			if err == nil || err == io.EOF {
+			if err == nil {
 				t.Errorf("Parse(%s) did not fail", c.s)
 			}
-		} else if err != io.EOF {
+		} else if err != nil {
+			t.Errorf("Parse(%s) failed with %s", c.s, err)
+		} else if !codesEqual(codes, c.codes) {
+			t.Errorf("Parse(%s)[%d]: got %v want %v", c.s, i, codes, c.codes)
+		} else {
+			_, err = p.Parse()
+			if err != io.EOF {
+				t.Errorf("Parse(%s) not at EOF: %s", c.s, err)
+			}
+		}
+	}
+}
+
+func TestParserLines(t *testing.T) {
+	cases := []struct {
+		s     string
+		lines [][]Code
+	}{
+		{
+			s: `
+G10 X1 Y2
+G11 (comment) X1 Y2
+G12 X1 (comment) Y2
+G13 X1 Y2 (comment)
+G14 X1 Y2 ; comment
+`,
+			lines: [][]Code{
+				{{'G', Number(10)}, {'X', Number(1)}, {'Y', Number(2)}},
+				{{'G', Number(11)}, {'X', Number(1)}, {'Y', Number(2)}},
+				{{'G', Number(12)}, {'X', Number(1)}, {'Y', Number(2)}},
+				{{'G', Number(13)}, {'X', Number(1)}, {'Y', Number(2)}},
+				{{'G', Number(14)}, {'X', Number(1)}, {'Y', Number(2)}},
+			},
+		},
+	}
+
+	for i, c := range cases {
+		p := Parser{
+			Scanner: strings.NewReader(c.s),
+			Dialect: BeagleG,
+		}
+
+		for _, line := range c.lines {
+			codes, err := p.Parse()
+			if err != nil {
+				t.Errorf("Parse(%s) failed with %s", c.s, err)
+			} else if !codesEqual(codes, line) {
+				t.Errorf("Parse(%s)[%d]: got %v want %v", c.s, i, codes, line)
+			}
+		}
+
+		_, err := p.Parse()
+		if err != io.EOF {
 			t.Errorf("Parse(%s) not at EOF: %s", c.s, err)
 		}
 	}
@@ -244,7 +298,7 @@ func TestParseNameAssignment(t *testing.T) {
 			Scanner: strings.NewReader(c.s),
 			Dialect: BeagleG,
 		}
-		_, _, err := p.Parse()
+		_, err := p.Parse()
 		if c.fail {
 			if err == nil {
 				t.Errorf("Parse(%s) did not fail", c.s)
@@ -304,7 +358,7 @@ func TestParseNumAssignment(t *testing.T) {
 		Scanner: strings.NewReader(s),
 		Dialect: BeagleG,
 	}
-	_, _, err := p.Parse()
+	_, err := p.Parse()
 	if err == nil {
 		t.Errorf("Parse(%s) did not fail", s)
 	}
@@ -314,7 +368,7 @@ func TestParseNumAssignment(t *testing.T) {
 		Scanner: strings.NewReader(s),
 		Dialect: BeagleG,
 	}
-	_, _, err = p.Parse()
+	_, err = p.Parse()
 	if err == nil {
 		t.Errorf("Parse(%s) did not fail", s)
 	}
@@ -338,7 +392,7 @@ func TestParseNumAssignment(t *testing.T) {
 				return nil
 			},
 		}
-		_, _, err := p.Parse()
+		_, err := p.Parse()
 		if c.fail {
 			if err == nil {
 				t.Errorf("Parse(%s) did not fail", c.s)
@@ -404,7 +458,7 @@ func TestParseIfBeagleG(t *testing.T) {
 				return nil
 			},
 		}
-		_, _, err := p.Parse()
+		_, err := p.Parse()
 		if c.fail {
 			if err == nil {
 				t.Errorf("Parse(%s) did not fail", c.s)
@@ -479,7 +533,7 @@ G1
 				return nil
 			},
 		}
-		_, _, err := p.Parse()
+		_, err := p.Parse()
 		if c.fail {
 			if err == nil {
 				t.Errorf("Parse(%s) did not fail", c.s)
@@ -508,15 +562,15 @@ func TestParseComments(t *testing.T) {
 		executed  bool
 		fail      bool
 	}{
-		{s: " ;abcd\nG10 ", comment: "abcd", lineEnd: true},
-		{s: "(abcd) G10 ", comment: "abcd", parsed: true},
-		{s: "(abcd) G10 ", comment: "abcd", intVal: 1, parsed: true, executed: true},
-		{s: "(abcd) G10 ", comment: "abcd", stringVal: "xyz", parsed: true, executed: true},
-		{s: "(abcd) G10 ", comment: "abcd", intVal: 1, stringVal: "xyz", parsed: true,
+		{s: " ;abcd\nG10\n", comment: "abcd", lineEnd: true},
+		{s: "(abcd) G10\n", comment: "abcd", parsed: true},
+		{s: "(abcd) G10\n", comment: "abcd", intVal: 1, parsed: true, executed: true},
+		{s: "(abcd) G10\n", comment: "abcd", stringVal: "xyz", parsed: true, executed: true},
+		{s: "(abcd) G10\n", comment: "abcd", intVal: 1, stringVal: "xyz", parsed: true,
 			executed: true},
-		{s: " ;fail\nG10 ", fail: true},
-		{s: "(fail) G10 ", fail: true},
-		{s: "(abcd) G10 ", comment: "abcd", intVal: -1, parsed: true, fail: true},
+		{s: " ;fail\nG10\n", fail: true},
+		{s: "(fail) G10\n", fail: true},
+		{s: "(abcd) G10\n", comment: "abcd", intVal: -1, parsed: true, fail: true},
 	}
 
 	for _, c := range cases {
@@ -559,7 +613,7 @@ func TestParseComments(t *testing.T) {
 			},
 		}
 
-		_, _, err := p.Parse()
+		_, err := p.Parse()
 		if c.fail {
 			if err == nil {
 				t.Errorf("Parse(%s) did not fail", c.s)
@@ -593,27 +647,26 @@ func TestParseComments(t *testing.T) {
 
 func TestParameters(t *testing.T) {
 	cases := []struct {
-		s    string
-		fail bool
-		code Code
-		num  Number
-		d    Dialect
+		s     string
+		fail  bool
+		codes []Code
+		d     Dialect
 	}{
-		{s: "#abc=11\nG#abc\n", code: 'G', num: 11},
+		{s: "#abc=11\nG#abc\n", codes: []Code{{'G', Number(11)}}},
 		{s: "G#abc\n", fail: true},
 
-		{s: "#999=22\nG#999\n", code: 'G', num: 22},
+		{s: "#999=22\nG#999\n", codes: []Code{{'G', Number(22)}}},
 		{s: "G#888\n", fail: true},
-		{s: "#1=2 #2=3\nG##1\n", code: 'G', num: 3},
-		{s: "#3=4\nG#[1+2]\n", code: 'G', num: 4},
-		{s: "#3=5\n#4=#[1+2]\nG#4\n", code: 'G', num: 5},
+		{s: "#1=2 #2=3\nG##1\n", codes: []Code{{'G', Number(3)}}},
+		{s: "#3=4\nG#[1+2]\n", codes: []Code{{'G', Number(4)}}},
+		{s: "#3=5\n#4=#[1+2]\nG#4\n", codes: []Code{{'G', Number(5)}}},
 
-		{s: "#abc=<def> #def=11\nG##abc\n", code: 'G', num: 11},
+		{s: "#abc=<def> #def=11\nG##abc\n", codes: []Code{{'G', Number(11)}}},
 
-		{s: "#abc=1\n#abc=2 G#abc\n", code: 'G', num: 2, d: BeagleG},
-		{s: "#<abc>=1\n#<abc>=2 G#<abc>\n", code: 'G', num: 1, d: LinuxCNC},
-		{s: "#1=1\n#1=2 % comment\nG#1\n", code: 'G', num: 2, d: BeagleG},
-		{s: "#1=1\n#1=2 % comment\nG#1\n", code: 'G', num: 2, d: LinuxCNC},
+		{s: "#abc=1\n#abc=2 G#abc\n", codes: []Code{{'G', Number(2)}}, d: BeagleG},
+		{s: "#<abc>=1\n#<abc>=2 G#<abc>\n", codes: []Code{{'G', Number(1)}}, d: LinuxCNC},
+		{s: "#1=1\n#1=2 % comment\nG#1\n", codes: []Code{{'G', Number(2)}}, d: BeagleG},
+		{s: "#1=1\n#1=2 % comment\nG#1\n", codes: []Code{{'G', Number(2)}}, d: LinuxCNC},
 
 		{s: "#abc=10\n*#abc ", fail: true},
 		{s: "#abc=10\nN#abc ", fail: true},
@@ -636,17 +689,15 @@ func TestParameters(t *testing.T) {
 				return nil
 			},
 		}
-		code, num, err := p.Parse()
+		codes, err := p.Parse()
 		if c.fail {
 			if err == nil {
 				t.Errorf("Parse(%s) did not fail", c.s)
 			}
 		} else if err != nil {
 			t.Errorf("Parse(%s) failed with %s", c.s, err)
-		} else if code != c.code {
-			t.Errorf("Parse(%s) got %c want %c", c.s, code, c.code)
-		} else if num != c.num {
-			t.Errorf("Parse(%s) got %s want %s", c.s, num, c.num)
+		} else if !reflect.DeepEqual(codes, c.codes) {
+			t.Errorf("Parse(%s) got %v want %v", c.s, codes, c.codes)
 		}
 	}
 }

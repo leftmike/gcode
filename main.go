@@ -31,19 +31,19 @@ func main() {
 			},
 		}
 
-		fmt.Print(os.Args[adx])
+		fmt.Println(os.Args[adx])
 		for {
-			code, val, err := p.Parse()
+			codes, err := p.Parse()
 			if err == io.EOF {
 				break
 			} else if err != nil {
 				log.Fatal(err)
 			}
 
-			if code == 'G' || code == 'M' {
-				fmt.Println()
+			for _, code := range codes {
+				fmt.Printf("%c%d ", code.Letter, int(code.Value.(parser.Number)))
 			}
-			fmt.Printf("%c%d ", code, int(val.(parser.Number)))
+			fmt.Println()
 		}
 		fmt.Println()
 	}

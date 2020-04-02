@@ -9,7 +9,7 @@ To Do:
    func (n Number) Equal(n2 Number) bool // and use instead of exprTest and in binary ops
 -- #1 to #30 are subroutine parameters and are local to the subroutine
 -- #<name> are local to the scope where it is assigned; scoped to subroutines
--- #31 + and #<_name> are global
+-- #31 and above, and #<_name> are global
 - add control/control.go which uses parser.Parser
 
 <line> = <prefix> <body> <suffix> ('\r' | '\n')
@@ -68,10 +68,15 @@ import (
 	"strconv"
 )
 
-type Code byte
+type Letter byte
 type Name string
 type Number float64
 type String string
+
+type Code struct {
+	Letter Letter
+	Value  Value
+}
 
 type Value interface {
 	AsName() (Name, bool)
@@ -110,7 +115,6 @@ type Parser struct {
 	physicalLine int // Count of lines
 	virtualLine  int // Lines as tracked by Nnnn
 	nameParams   map[Name]Value
-	endFuncs     []endFunc
 	stack        *stackFrame
 }
 
@@ -135,18 +139,12 @@ const (
 type endFunc func(p *Parser)
 
 type action interface {
-	evaluate(p *Parser, endFuncs []endFunc) (Code, Value, []endFunc)
+	evaluate(p *Parser, codes []Code, endFuncs []endFunc) ([]Code, []endFunc, bool)
 }
 
 type expression interface {
 	evaluate(p *Parser) Value
 }
-
-const (
-	nilCode   Code = 0
-	firstCode Code = 'A'
-	lastCode  Code = 'Z'
-)
 
 type assignOp byte
 
@@ -415,17 +413,19 @@ func (c *call) evaluate(p *Parser) Value {
 	return c.fn(p, args)
 }
 
-func (p *Parser) Parse() (code Code, val Value, err error) {
+func (p *Parser) Parse() (codes []Code, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if _, ok := r.(runtime.Error); ok {
 				panic(r)
 			}
 			err = r.(error)
-			code = 0
-			val = nil
+			codes = nil
 		}
 	}()
+
+	var endFuncs []endFunc
+	codes = nil
 
 	for {
 		var act action
@@ -440,11 +440,10 @@ func (p *Parser) Parse() (code Code, val Value, err error) {
 			}
 		}
 
-		var code Code
-		var val Value
-		code, val, p.endFuncs = act.evaluate(p, p.endFuncs)
-		if code >= firstCode && code <= lastCode {
-			return code, val, nil
+		var done bool
+		codes, endFuncs, done = act.evaluate(p, codes, endFuncs)
+		if done && len(codes) > 0 {
+			return codes, nil
 		}
 	}
 }
@@ -1116,12 +1115,14 @@ func (p *Parser) parseIfBeagleG() action {
 }
 
 type codeAction struct {
-	code Code
-	expr expression
+	letter Letter
+	expr   expression
 }
 
-func (ca codeAction) evaluate(p *Parser, endFuncs []endFunc) (Code, Value, []endFunc) {
-	return ca.code, ca.expr.evaluate(p), endFuncs
+func (ca codeAction) evaluate(p *Parser, codes []Code, endFuncs []endFunc) ([]Code,
+	[]endFunc, bool) {
+
+	return append(codes, Code{ca.letter, ca.expr.evaluate(p)}), endFuncs, false
 }
 
 type numAssignAction struct {
@@ -1178,20 +1179,22 @@ func numAssignment(p *Parser, num int, assignOp assignOp, val Number) {
 	}
 }
 
-func (naa numAssignAction) evaluate(p *Parser, endFuncs []endFunc) (Code, Value, []endFunc) {
+func (naa numAssignAction) evaluate(p *Parser, codes []Code, endFuncs []endFunc) ([]Code,
+	[]endFunc, bool) {
+
 	if p.GetNumParam == nil || p.SetNumParam == nil {
 		p.error("setting number parameters not supported")
 	}
 
 	if p.Dialect == LinuxCNC {
-		return nilCode, nil, append(endFuncs,
+		return codes, append(endFuncs,
 			func(p *Parser) {
 				numAssignment(p, naa.num, naa.assignOp, p.wantNumber(naa.expr.evaluate(p)))
-			})
+			}), false
 	} else {
 		numAssignment(p, naa.num, naa.assignOp, p.wantNumber(naa.expr.evaluate(p)))
 
-		return nilCode, nil, endFuncs
+		return codes, endFuncs, false
 	}
 }
 
@@ -1238,16 +1241,18 @@ func nameAssignment(p *Parser, name Name, assignOp assignOp, val Value) {
 	}
 }
 
-func (naa nameAssignAction) evaluate(p *Parser, endFuncs []endFunc) (Code, Value, []endFunc) {
+func (naa nameAssignAction) evaluate(p *Parser, codes []Code, endFuncs []endFunc) ([]Code,
+	[]endFunc, bool) {
+
 	if p.Dialect == LinuxCNC {
-		return nilCode, nil, append(endFuncs,
+		return codes, append(endFuncs,
 			func(p *Parser) {
 				nameAssignment(p, naa.name, naa.assignOp, naa.expr.evaluate(p))
-			})
+			}), false
 	} else {
 		nameAssignment(p, naa.name, naa.assignOp, naa.expr.evaluate(p))
 
-		return nilCode, nil, endFuncs
+		return codes, endFuncs, false
 	}
 }
 
@@ -1256,12 +1261,14 @@ type commentAction struct {
 	stringVal string
 }
 
-func (ca commentAction) evaluate(p *Parser, endFuncs []endFunc) (Code, Value, []endFunc) {
+func (ca commentAction) evaluate(p *Parser, codes []Code, endFuncs []endFunc) ([]Code, []endFunc,
+	bool) {
+
 	err := p.InlineExecuted(ca.intVal, ca.stringVal)
 	if err != nil {
 		p.error(err.Error())
 	}
-	return nilCode, nil, endFuncs
+	return codes, endFuncs, false
 }
 
 type whileActionBeagleG struct {
@@ -1269,7 +1276,9 @@ type whileActionBeagleG struct {
 	actions   []action
 }
 
-func (wa *whileActionBeagleG) evaluate(p *Parser, endFuncs []endFunc) (Code, Value, []endFunc) {
+func (wa *whileActionBeagleG) evaluate(p *Parser, codes []Code, endFuncs []endFunc) ([]Code,
+	[]endFunc, bool) {
+
 	if p.exprTest(wa.whileTest) {
 		p.stack = &stackFrame{
 			actions: wa.actions,
@@ -1277,15 +1286,17 @@ func (wa *whileActionBeagleG) evaluate(p *Parser, endFuncs []endFunc) (Code, Val
 		}
 	}
 
-	return nilCode, nil, endFuncs
+	return codes, endFuncs, false
 }
 
 type endActionBeagleG struct{}
 
-func (ea endActionBeagleG) evaluate(p *Parser, endFuncs []endFunc) (Code, Value, []endFunc) {
+func (ea endActionBeagleG) evaluate(p *Parser, codes []Code, endFuncs []endFunc) ([]Code,
+	[]endFunc, bool) {
+
 	p.error("unexpected END, no matching WHILE")
 
-	return nilCode, nil, endFuncs
+	return codes, endFuncs, false
 }
 
 type ifActionBeagleG struct {
@@ -1300,30 +1311,34 @@ func (p *Parser) exprTest(expr expression) bool {
 	return math.Abs(float64(p.wantNumber(expr.evaluate(p)))) >= minimumDelta
 }
 
-func (ia ifActionBeagleG) evaluate(p *Parser, endFuncs []endFunc) (Code, Value, []endFunc) {
+func (ia ifActionBeagleG) evaluate(p *Parser, codes []Code, endFuncs []endFunc) ([]Code,
+	[]endFunc, bool) {
+
 	if p.exprTest(ia.ifTest) {
-		return ia.thenAssign.evaluate(p, endFuncs)
+		return ia.thenAssign.evaluate(p, codes, endFuncs)
 	}
 
 	for edx := range ia.elseifTests {
 		if math.Abs(float64(p.wantNumber(ia.elseifTests[edx].evaluate(p)))) >= minimumDelta {
-			return ia.elseifAssigns[edx].evaluate(p, endFuncs)
+			return ia.elseifAssigns[edx].evaluate(p, codes, endFuncs)
 		}
 	}
 
 	if ia.elseAssign != nil {
-		return ia.elseAssign.evaluate(p, endFuncs)
+		return ia.elseAssign.evaluate(p, codes, endFuncs)
 	}
-	return nilCode, nil, endFuncs
+	return codes, endFuncs, false
 }
 
 type eolAction struct{}
 
-func (ea eolAction) evaluate(p *Parser, endFuncs []endFunc) (Code, Value, []endFunc) {
+func (ea eolAction) evaluate(p *Parser, codes []Code, endFuncs []endFunc) ([]Code, []endFunc,
+	bool) {
+
 	for _, efn := range endFuncs {
 		efn(p)
 	}
-	return nilCode, nil, nil
+	return codes, nil, true
 }
 
 func (p *Parser) parse() action {
@@ -1419,7 +1434,7 @@ func (p *Parser) parse() action {
 			// Parse Nnnn.
 
 			if p.lineState != beforeLineNum {
-				p.error("N code must be first on line")
+				p.error("N must be first on line")
 			}
 
 			num := p.wantInteger()
@@ -1435,8 +1450,8 @@ func (p *Parser) parse() action {
 			}
 			p.lineState = inBody
 
-			// Parse all the other codes (A to Z except N).
-			return codeAction{code: Code(b), expr: p.parseExpr()}
+			// Parse all the other letters (A to Z except N).
+			return codeAction{letter: Letter(b), expr: p.parseExpr()}
 		}
 	}
 }
