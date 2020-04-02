@@ -5,8 +5,6 @@ To Do:
 - RepRap: support {} instead of [] for expressions
 - _ prefix for global parameter names
 - LinuxCNC
--- numbers are equal if their absolute difference is less that 0.0001
-   func (n Number) Equal(n2 Number) bool // and use instead of exprTest and in binary ops
 -- #1 to #30 are subroutine parameters and are local to the subroutine
 -- #<name> are local to the scope where it is assigned; scoped to subroutines
 -- #31 and above, and #<_name> are global
@@ -240,6 +238,13 @@ type call struct {
 
 func (n Number) String() string {
 	return strconv.FormatFloat(float64(n), 'f', 6, 64)
+}
+
+func (n Number) Equal(n2 Number) bool {
+	// Numbers are equal if their absolute difference is less that 0.0001
+
+	delta := math.Abs(float64(n)) - math.Abs(float64(n2))
+	return math.Abs(delta) < minimumDelta
 }
 
 func (_ Number) AsName() (Name, bool) {
@@ -1279,7 +1284,7 @@ type whileActionBeagleG struct {
 func (wa *whileActionBeagleG) evaluate(p *Parser, codes []Code, endFuncs []endFunc) ([]Code,
 	[]endFunc, bool) {
 
-	if p.exprTest(wa.whileTest) {
+	if !Number(0).Equal(p.wantNumber(wa.whileTest.evaluate(p))) {
 		p.stack = &stackFrame{
 			actions: wa.actions,
 			next:    p.stack,
@@ -1307,14 +1312,10 @@ type ifActionBeagleG struct {
 	elseAssign    action
 }
 
-func (p *Parser) exprTest(expr expression) bool {
-	return math.Abs(float64(p.wantNumber(expr.evaluate(p)))) >= minimumDelta
-}
-
 func (ia ifActionBeagleG) evaluate(p *Parser, codes []Code, endFuncs []endFunc) ([]Code,
 	[]endFunc, bool) {
 
-	if p.exprTest(ia.ifTest) {
+	if !Number(0).Equal(p.wantNumber(ia.ifTest.evaluate(p))) {
 		return ia.thenAssign.evaluate(p, codes, endFuncs)
 	}
 
