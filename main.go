@@ -1,50 +1,58 @@
 package main
 
+/*
+To Do:
+- RepRap: parser: support {} instead of [] for expressions
+- _ prefix for global parameter names
+- LinuxCNC
+-- #1 to #30 are subroutine parameters and are local to the subroutine
+-- #<name> are local to the scope where it is assigned; scoped to subroutines
+-- #31 and above, and #<_name> are global
+- add control/control.go which uses parser.Parser
+*/
+
 import (
 	"bufio"
 	"fmt"
-	"io"
 	"log"
 	"os"
 
+	engine "github.com/leftmike/gcode/engine"
 	parser "github.com/leftmike/gcode/parser"
 )
 
+type machine struct{}
+
+func (m machine) RapidTo(pos engine.Position) error {
+	return nil
+}
+
+func (m machine) LinearTo(pos engine.Position, feed float64) error {
+	return nil
+}
+
 func main() {
-	for adx := 1; adx < len(os.Args); adx += 1 {
-		f, err := os.Open(os.Args[adx])
+	if len(os.Args) <= 1 {
+		eng := engine.NewEngine(machine{}, parser.BeagleG)
+		err := eng.Evaluate(bufio.NewReader(os.Stdin))
 		if err != nil {
-			log.Fatal(err)
+			log.Print(err)
 		}
-		defer f.Close()
-
-		numParams := map[int]parser.Number{}
-		p := parser.Parser{
-			Scanner: bufio.NewReader(f),
-			Dialect: parser.BeagleG,
-			GetNumParam: func(num int) (parser.Number, error) {
-				return numParams[num], nil
-			},
-			SetNumParam: func(num int, val parser.Number) error {
-				numParams[num] = val
-				return nil
-			},
-		}
-
-		fmt.Println(os.Args[adx])
-		for {
-			codes, err := p.Parse()
-			if err == io.EOF {
-				break
-			} else if err != nil {
+	} else {
+		for adx := 1; adx < len(os.Args); adx += 1 {
+			f, err := os.Open(os.Args[adx])
+			if err != nil {
 				log.Fatal(err)
 			}
+			defer f.Close()
 
-			for _, code := range codes {
-				fmt.Printf("%c%d ", code.Letter, int(code.Value.(parser.Number)))
+			fmt.Println(os.Args[adx])
+			eng := engine.NewEngine(machine{}, parser.BeagleG)
+			err = eng.Evaluate(bufio.NewReader(f))
+			if err != nil {
+				log.Print(err)
 			}
 			fmt.Println()
 		}
-		fmt.Println()
 	}
 }

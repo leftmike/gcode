@@ -1,15 +1,6 @@
 package gcode
 
 /*
-To Do:
-- RepRap: support {} instead of [] for expressions
-- _ prefix for global parameter names
-- LinuxCNC
--- #1 to #30 are subroutine parameters and are local to the subroutine
--- #<name> are local to the scope where it is assigned; scoped to subroutines
--- #31 and above, and #<_name> are global
-- add control/control.go which uses parser.Parser
-
 <line> = <prefix> <body> <suffix> ('\r' | '\n')
 <prefix> = (<whitespace> | <inline-comment>)* ['N' <number>]
 <suffix> = ['*' <number> <whitespace>*] [<trailing-comment>]
@@ -234,6 +225,10 @@ type callFunc func(p *Parser, args []Value) Value
 type call struct {
 	fn   callFunc
 	args []expression
+}
+
+func (c Code) String() string {
+	return fmt.Sprintf("%c%s", c.Letter, c.Value)
 }
 
 func (n Number) String() string {
