@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"io"
 
@@ -14,6 +15,10 @@ const (
 type Position struct {
 	X, Y, Z float64
 }
+
+var (
+	zeroPosition = Position{0.0, 0.0, 0.0}
+)
 
 func (pos *Position) add(pos2 Position) {
 	pos.X += pos2.X
@@ -44,28 +49,32 @@ type engine struct {
 	homePos      Position
 	curPos       Position
 	maxPos       Position
-	curCoord     int
-	coordPos     [9]Position
+	curCoordSys  int
+	coordSysPos  [9]Position
+	workPos      Position
+	savedWorkPos Position
 	moveMode     moveMode
 	absoluteMode bool
 }
 
 func NewEngine(m Machine, d parser.Dialect) *engine {
 	return &engine{
-		machine:   m,
-		dialect:   d,
-		numParams: map[int]parser.Number{},
-		feed:      0.0,
-		units:     1.0, // default units is mm
-		homePos:   Position{0.0, 0.0, 0.0},
-		curPos:    Position{0.0, 0.0, 0.0}, // default current position at home
-		maxPos:    Position{mmPerInch * 12.0, mmPerInch * 12.0, mmPerInch * 4.0},
-		curCoord:  0,
-		coordPos: [9]Position{
-			{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0},
-			{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0},
-			{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0},
+		machine:     m,
+		dialect:     d,
+		numParams:   map[int]parser.Number{},
+		feed:        0.0,
+		units:       1.0, // default units is mm
+		homePos:     zeroPosition,
+		curPos:      zeroPosition, // default current position at home
+		maxPos:      Position{mmPerInch * 12.0, mmPerInch * 12.0, mmPerInch * 4.0},
+		curCoordSys: 0,
+		coordSysPos: [9]Position{
+			zeroPosition, zeroPosition, zeroPosition,
+			zeroPosition, zeroPosition, zeroPosition,
+			zeroPosition, zeroPosition, zeroPosition,
 		},
+		workPos:      zeroPosition,
+		savedWorkPos: zeroPosition,
 		moveMode:     linearMove,
 		absoluteMode: false,
 	}
@@ -93,6 +102,8 @@ type axes int
 
 const (
 	fAxis = 1 << iota
+	lAxis
+	pAxis
 	xAxis
 	yAxis
 	zAxis
@@ -105,6 +116,14 @@ func parseAxes(codes []parser.Code, allowed axes) ([]axis, []parser.Code, error)
 		switch code.Letter {
 		case 'F':
 			if (allowed & fAxis) == 0 {
+				return nil, nil, fmt.Errorf("axis not allowed: %s", code)
+			}
+		case 'L':
+			if (allowed & lAxis) == 0 {
+				return nil, nil, fmt.Errorf("axis not allowed: %s", code)
+			}
+		case 'P':
+			if (allowed & pAxis) == 0 {
 				return nil, nil, fmt.Errorf("axis not allowed: %s", code)
 			}
 		case 'X':
@@ -140,6 +159,16 @@ func parseAxes(codes []parser.Code, allowed axes) ([]axis, []parser.Code, error)
 	return axes, codes, nil
 }
 
+func requireAxis(axes []axis, letter parser.Letter) (parser.Number, error) {
+	for _, axis := range axes {
+		if axis.letter == letter {
+			return axis.num, nil
+		}
+	}
+
+	return 0, fmt.Errorf("missing require axis: %c", letter)
+}
+
 func (eng *engine) moveTo(codes []parser.Code) ([]parser.Code, error) {
 	var err error
 	var axes []axis
@@ -148,22 +177,22 @@ func (eng *engine) moveTo(codes []parser.Code) ([]parser.Code, error) {
 		return nil, err
 	}
 
-	var pos Position
+	pos := zeroPosition
 	for _, axis := range axes {
 		switch axis.letter {
 		case 'F':
-			eng.feed = float64(axis.num)
+			eng.feed = float64(axis.num) * eng.units
 		case 'X':
-			pos.X = float64(axis.num)
+			pos.X = float64(axis.num) * eng.units
 		case 'Y':
-			pos.Y = float64(axis.num)
+			pos.Y = float64(axis.num) * eng.units
 		case 'Z':
-			pos.Z = float64(axis.num)
+			pos.Z = float64(axis.num) * eng.units
 		}
 	}
 
 	if eng.absoluteMode {
-		pos.add(eng.coordPos[eng.curCoord])
+		pos.add(eng.coordSysPos[eng.curCoordSys])
 	} else {
 		pos.add(eng.curPos)
 	}
@@ -181,6 +210,115 @@ func (eng *engine) moveTo(codes []parser.Code) ([]parser.Code, error) {
 	}
 	eng.curPos = pos
 
+	return codes, nil
+}
+
+func (eng *engine) setCoordinateSystemPosition(axes []axis, absolute bool) error {
+	p, err := requireAxis(axes, 'P')
+	if err != nil {
+		return err
+	}
+	var coordSys int
+	if p.Equal(0.0) {
+		coordSys = eng.curCoordSys
+	} else if p.Equal(1.0) {
+		coordSys = 0
+	} else if p.Equal(2.0) {
+		coordSys = 1
+	} else if p.Equal(3.0) {
+		coordSys = 2
+	} else if p.Equal(4.0) {
+		coordSys = 3
+	} else if p.Equal(5.0) {
+		coordSys = 4
+	} else if p.Equal(6.0) {
+		coordSys = 5
+	} else if p.Equal(7.0) {
+		coordSys = 6
+	} else if p.Equal(8.0) {
+		coordSys = 7
+	} else if p.Equal(1.0) {
+		coordSys = 8
+	} else {
+		return fmt.Errorf("expected a coordinate system: P%s", p)
+	}
+
+	pos := zeroPosition
+	for _, axis := range axes {
+		switch axis.letter {
+		case 'X':
+			pos.X = float64(axis.num) * eng.units
+		case 'Y':
+			pos.Y = float64(axis.num) * eng.units
+		case 'Z':
+			pos.Z = float64(axis.num) * eng.units
+		}
+	}
+
+	if !absolute {
+		pos.add(eng.curPos)
+	}
+	eng.coordSysPos[coordSys] = pos
+
+	return nil
+}
+
+func (eng *engine) modifyPositions(codes []parser.Code) ([]parser.Code, error) {
+	var err error
+	var axes []axis
+	axes, codes, err = parseAxes(codes, lAxis|pAxis|xAxis|yAxis|zAxis)
+	if err != nil {
+		return nil, err
+	}
+	l, err := requireAxis(axes, 'L')
+	if err != nil {
+		return nil, err
+	}
+
+	if l.Equal(2.0) { // G10 L2: set coordinate system offset (relative)
+		err = eng.setCoordinateSystemPosition(axes, false)
+		if err != nil {
+			return nil, err
+		}
+		return codes, nil
+	} else if l.Equal(20.0) { // G10 L20: set coordinate system offset (absolute)
+		err = eng.setCoordinateSystemPosition(axes, true)
+		if err != nil {
+			return nil, err
+		}
+		return codes, nil
+	}
+
+	return nil, fmt.Errorf("unexpected L value to G10: L%s", l)
+}
+
+func (eng *engine) setWorkPosition(codes []parser.Code) ([]parser.Code, error) {
+	var err error
+	var axes []axis
+	axes, codes, err = parseAxes(codes, xAxis|yAxis|zAxis)
+	if err != nil {
+		return nil, err
+	}
+	if len(axes) == 0 {
+		return nil, errors.New("expected at least one X, Y, or Z axis")
+	}
+
+	pos := zeroPosition
+	for _, axis := range axes {
+		switch axis.letter {
+		case 'X':
+			pos.X = (eng.coordSysPos[eng.curCoordSys].X + float64(axis.num)*eng.units) -
+				eng.curPos.X
+		case 'Y':
+			pos.Y = (eng.coordSysPos[eng.curCoordSys].Y + float64(axis.num)*eng.units) -
+				eng.curPos.Y
+		case 'Z':
+			pos.Z = (eng.coordSysPos[eng.curCoordSys].Z + float64(axis.num)*eng.units) -
+				eng.curPos.Z
+		}
+	}
+
+	eng.workPos = pos
 	return codes, nil
 }
 
@@ -202,14 +340,15 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 
 		for len(codes) > 0 {
 			code := codes[0]
-			codes = codes[1:]
 			num, ok := code.Value.AsNumber()
 			if !ok {
-				return fmt.Errorf("expected a number: %v", code.Value)
+				return fmt.Errorf("expected a number: %s", code)
 			}
 
 			switch code.Letter {
 			case 'G':
+				codes = codes[1:]
+
 				if num.Equal(0.0) { // G0: rapid move
 					eng.moveMode = rapidMove
 					codes, err = eng.moveTo(codes)
@@ -221,6 +360,11 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 					codes, err = eng.moveTo(codes)
 					if err != nil {
 						return err
+					}
+				} else if num.Equal(10.0) { // G10
+					codes, err = eng.modifyPositions(codes)
+					if err != nil {
+						return nil
 					}
 				} else if num.Equal(20.0) { // G20: coordinates in inches
 					eng.units = mmPerInch
@@ -234,55 +378,79 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 					}
 					eng.curPos = eng.homePos
 				} else if num.Equal(54.0) { // G54: use coordinate system one
-					eng.curCoord = 0
+					eng.curCoordSys = 0
 				} else if num.Equal(55.0) { // G54: use coordinate system two
-					eng.curCoord = 1
+					eng.curCoordSys = 1
 				} else if num.Equal(56.0) { // G54: use coordinate system three
-					eng.curCoord = 2
+					eng.curCoordSys = 2
 				} else if num.Equal(57.0) { // G54: use coordinate system four
-					eng.curCoord = 3
+					eng.curCoordSys = 3
 				} else if num.Equal(58.0) { // G54: use coordinate system five
-					eng.curCoord = 4
+					eng.curCoordSys = 4
 				} else if num.Equal(59.0) { // G54: use coordinate system six
-					eng.curCoord = 5
+					eng.curCoordSys = 5
 				} else if num.Equal(59.1) { // G54: use coordinate system seven
-					eng.curCoord = 6
+					eng.curCoordSys = 6
 				} else if num.Equal(59.2) { // G54: use coordinate system eight
-					eng.curCoord = 7
+					eng.curCoordSys = 7
 				} else if num.Equal(59.3) { // G54: use coordinate system nine
-					eng.curCoord = 8
+					eng.curCoordSys = 8
 				} else if num.Equal(90.0) { // G90: absolute distance mode
 					eng.absoluteMode = true
 				} else if num.Equal(91.0) { // G91: incremental distance mode
 					eng.absoluteMode = false
+				} else if num.Equal(92.0) { // G92: set work position
+					codes, err = eng.setWorkPosition(codes)
+					if err != nil {
+						return nil
+					}
+					// XXX: apply offsets before issuing absolute machine commands
+				} else if num.Equal(92.1) { // G92.1: zero work position
+					eng.workPos = zeroPosition
+					eng.savedWorkPos = zeroPosition
+				} else if num.Equal(92.2) { // G92.2: save work position, then zero
+					eng.savedWorkPos = eng.workPos
+					eng.workPos = zeroPosition
+				} else if num.Equal(92.3) { // G92.3: restore saved work position
+					eng.workPos = eng.savedWorkPos
 				} else {
 					/*
 					   G2, G3: arc move
 					   G5: cubic spline
 					   G5.1: quadratic spline
-					   G10 L2: set coordinate system offset
-					   G10 L20: set coordinate system offset
 					   G17: XY plane selection
 					   G18: ZX plane selection
 					   G19: YZ plane selection
 					   G53: use absolute coordinates
-					   G92: set position
 					*/
-					fmt.Printf("%v\n", codes)
-					return fmt.Errorf("unexpected code: %s", code)
+					return fmt.Errorf("unexpected code: %s: %v", code, codes)
 				}
 			case 'M':
+				// XXX
+				codes = nil
 			case 'F':
-			case 'X':
-			case 'Y':
-			case 'Z':
+				if eng.moveMode == linearMove {
+					codes, err = eng.moveTo(codes)
+					if err != nil {
+						return err
+					}
+				} else {
+					return fmt.Errorf("axis not allowed: %s", code)
+				}
+			case 'X', 'Y', 'Z':
+				switch eng.moveMode {
+				case rapidMove, linearMove:
+					codes, err = eng.moveTo(codes)
+					if err != nil {
+						return err
+					}
+				default:
+					return fmt.Errorf("axis not allowed: %s", code)
+				}
 			default:
 				return fmt.Errorf("unexpected code: %s", code)
 			}
-
-			//			fmt.Printf("%s ", code)
 		}
-		//		fmt.Println()
 	}
 
 	return nil
