@@ -20,12 +20,6 @@ var (
 	zeroPosition = Position{0.0, 0.0, 0.0}
 )
 
-func (pos *Position) add(pos2 Position) {
-	pos.X += pos2.X
-	pos.Y += pos2.Y
-	pos.Z += pos2.Z
-}
-
 type Machine interface {
 	RapidTo(pos Position) error
 	LinearTo(pos Position, feed float64) error
@@ -93,6 +87,7 @@ func (eng *engine) setNumParam(num int, val parser.Number) error {
 	return nil
 }
 
+// XXX: consider changing axis/axes to arg/args
 type axis struct {
 	letter parser.Letter
 	num    parser.Number
@@ -169,6 +164,30 @@ func requireAxis(axes []axis, letter parser.Letter) (parser.Number, error) {
 	return 0, fmt.Errorf("missing require axis: %c", letter)
 }
 
+func (eng *engine) toMachineX(x float64, absolute bool) float64 {
+	if absolute {
+		return eng.coordSysPos[eng.curCoordSys].X + eng.workPos.X + x
+	}
+	// relative
+	return eng.curPos.X + x
+}
+
+func (eng *engine) toMachineY(y float64, absolute bool) float64 {
+	if absolute {
+		return eng.coordSysPos[eng.curCoordSys].Y + eng.workPos.Y + y
+	}
+	// relative
+	return eng.curPos.Y + y
+}
+
+func (eng *engine) toMachineZ(z float64, absolute bool) float64 {
+	if absolute {
+		return eng.coordSysPos[eng.curCoordSys].Z + eng.workPos.Z + z
+	}
+	// relative
+	return eng.curPos.Z + z
+}
+
 func (eng *engine) moveTo(codes []parser.Code) ([]parser.Code, error) {
 	var err error
 	var axes []axis
@@ -177,24 +196,18 @@ func (eng *engine) moveTo(codes []parser.Code) ([]parser.Code, error) {
 		return nil, err
 	}
 
-	pos := zeroPosition
+	pos := eng.curPos
 	for _, axis := range axes {
 		switch axis.letter {
 		case 'F':
 			eng.feed = float64(axis.num) * eng.units
 		case 'X':
-			pos.X = float64(axis.num) * eng.units
+			pos.X = eng.toMachineX(float64(axis.num)*eng.units, eng.absoluteMode)
 		case 'Y':
-			pos.Y = float64(axis.num) * eng.units
+			pos.Y = eng.toMachineY(float64(axis.num)*eng.units, eng.absoluteMode)
 		case 'Z':
-			pos.Z = float64(axis.num) * eng.units
+			pos.Z = eng.toMachineZ(float64(axis.num)*eng.units, eng.absoluteMode)
 		}
-	}
-
-	if eng.absoluteMode {
-		pos.add(eng.coordSysPos[eng.curCoordSys])
-	} else {
-		pos.add(eng.curPos)
 	}
 
 	switch eng.moveMode {
@@ -213,7 +226,7 @@ func (eng *engine) moveTo(codes []parser.Code) ([]parser.Code, error) {
 	return codes, nil
 }
 
-func (eng *engine) setCoordinateSystemPosition(axes []axis, absolute bool) error {
+func (eng *engine) setCoordinateSystemPosition(axes []axis, machine bool) error {
 	p, err := requireAxis(axes, 'P')
 	if err != nil {
 		return err
@@ -243,22 +256,28 @@ func (eng *engine) setCoordinateSystemPosition(axes []axis, absolute bool) error
 		return fmt.Errorf("expected a coordinate system: P%s", p)
 	}
 
-	pos := zeroPosition
 	for _, axis := range axes {
 		switch axis.letter {
 		case 'X':
-			pos.X = float64(axis.num) * eng.units
+			if machine {
+				eng.coordSysPos[coordSys].X = float64(axis.num) * eng.units
+			} else {
+				eng.coordSysPos[coordSys].X = eng.curPos.X + float64(axis.num)*eng.units
+			}
 		case 'Y':
-			pos.Y = float64(axis.num) * eng.units
+			if machine {
+				eng.coordSysPos[coordSys].Y = float64(axis.num) * eng.units
+			} else {
+				eng.coordSysPos[coordSys].Y = eng.curPos.Y + float64(axis.num)*eng.units
+			}
 		case 'Z':
-			pos.Z = float64(axis.num) * eng.units
+			if machine {
+				eng.coordSysPos[coordSys].Z = float64(axis.num) * eng.units
+			} else {
+				eng.coordSysPos[coordSys].Z = eng.curPos.Z + float64(axis.num)*eng.units
+			}
 		}
 	}
-
-	if !absolute {
-		pos.add(eng.curPos)
-	}
-	eng.coordSysPos[coordSys] = pos
 
 	return nil
 }
@@ -275,14 +294,14 @@ func (eng *engine) modifyPositions(codes []parser.Code) ([]parser.Code, error) {
 		return nil, err
 	}
 
-	if l.Equal(2.0) { // G10 L2: set coordinate system offset (relative)
-		err = eng.setCoordinateSystemPosition(axes, false)
+	if l.Equal(2.0) { // G10 L2: set coordinate system offset (machine)
+		err = eng.setCoordinateSystemPosition(axes, true)
 		if err != nil {
 			return nil, err
 		}
 		return codes, nil
-	} else if l.Equal(20.0) { // G10 L20: set coordinate system offset (absolute)
-		err = eng.setCoordinateSystemPosition(axes, true)
+	} else if l.Equal(20.0) { // G10 L20: set coordinate system offset (relative)
+		err = eng.setCoordinateSystemPosition(axes, false)
 		if err != nil {
 			return nil, err
 		}
@@ -303,22 +322,17 @@ func (eng *engine) setWorkPosition(codes []parser.Code) ([]parser.Code, error) {
 		return nil, errors.New("expected at least one X, Y, or Z axis")
 	}
 
-	pos := zeroPosition
 	for _, axis := range axes {
 		switch axis.letter {
 		case 'X':
-			pos.X = (eng.coordSysPos[eng.curCoordSys].X + float64(axis.num)*eng.units) -
-				eng.curPos.X
+			eng.workPos.X += eng.toMachineX(float64(axis.num)*eng.units, true) - eng.curPos.X
 		case 'Y':
-			pos.Y = (eng.coordSysPos[eng.curCoordSys].Y + float64(axis.num)*eng.units) -
-				eng.curPos.Y
+			eng.workPos.Y += eng.toMachineY(float64(axis.num)*eng.units, true) - eng.curPos.Y
 		case 'Z':
-			pos.Z = (eng.coordSysPos[eng.curCoordSys].Z + float64(axis.num)*eng.units) -
-				eng.curPos.Z
+			eng.workPos.Z += eng.toMachineZ(float64(axis.num)*eng.units, true) - eng.curPos.Z
 		}
 	}
 
-	eng.workPos = pos
 	return codes, nil
 }
 
@@ -404,7 +418,6 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 					if err != nil {
 						return nil
 					}
-					// XXX: apply offsets before issuing absolute machine commands
 				} else if num.Equal(92.1) { // G92.1: zero work position
 					eng.workPos = zeroPosition
 					eng.savedWorkPos = zeroPosition
