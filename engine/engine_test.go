@@ -27,7 +27,7 @@ type machine struct {
 
 func (m *machine) checkAction(act action) error {
 	if m.adx >= len(m.actions) {
-		return fmt.Errorf("test: more than %d actions", len(m.actions))
+		return fmt.Errorf("test: more than %d actions: %#v", len(m.actions), act)
 	}
 
 	if act != m.actions[m.adx] {
@@ -56,6 +56,7 @@ func TestEvaluate(t *testing.T) {
 		actions []action
 	}{
 		{s: `
+G21
 G91
 G0 X1 Y1
 G1 F1
@@ -74,6 +75,26 @@ Y-1
 			},
 		},
 		{s: `
+G21
+G90
+G0 X2 Y2
+G1 F1
+X4
+Y4
+X2
+Y2
+`,
+			actions: []action{
+				{cmd: rapidTo, x: 2.0, y: 2.0},
+				{cmd: setFeed, f: 1.0},
+				{cmd: linearTo, x: 4.0, y: 2.0},
+				{cmd: linearTo, x: 4.0, y: 4.0},
+				{cmd: linearTo, x: 2.0, y: 4.0},
+				{cmd: linearTo, x: 2.0, y: 2.0},
+			},
+		},
+		{s: `
+G21
 G10 L2 P1 X-1 Y-1
 G54
 G90
@@ -95,6 +116,7 @@ Y-1
 			},
 		},
 		{s: `
+G21
 G90
 G0 X1 Y1
 G10 L20 P1 X0 Y0
@@ -115,6 +137,7 @@ Y-1
 			},
 		},
 		{s: `
+G21
 G90
 G0 X1 Y1
 G10 L20 P1 X-1 Y-1
@@ -135,6 +158,126 @@ Y-1
 				{cmd: linearTo, x: 3.0, y: 3.0},
 				{cmd: linearTo, x: 2.0, y: 3.0},
 				{cmd: linearTo, x: 2.0, y: 2.0},
+			},
+		},
+		{s: `
+G21
+G90
+G0 X1 Y1
+G91
+G1 F1
+X1
+Y1
+X-1
+Y-1
+G92 X-2 Y0
+G90
+G0 X0 Y0
+G91
+G1 X1
+Y1
+X-1
+Y-1
+`,
+			actions: []action{
+				{cmd: rapidTo, x: 1.0, y: 1.0},
+				{cmd: setFeed, f: 1.0},
+				{cmd: linearTo, x: 2.0, y: 1.0},
+				{cmd: linearTo, x: 2.0, y: 2.0},
+				{cmd: linearTo, x: 1.0, y: 2.0},
+				{cmd: linearTo, x: 1.0, y: 1.0},
+				{cmd: rapidTo, x: 3.0, y: 1.0},
+				{cmd: linearTo, x: 4.0, y: 1.0},
+				{cmd: linearTo, x: 4.0, y: 2.0},
+				{cmd: linearTo, x: 3.0, y: 2.0},
+				{cmd: linearTo, x: 3.0, y: 1.0},
+			},
+		},
+		{s: `
+G21
+G90
+G0 X1 Y1
+G91
+G1 F1
+X1
+Y1
+X-1
+Y-1
+G92 X-1
+G90
+G0 X0 Y0
+G91
+G1 X1
+Y1
+X-1
+Y-1
+`,
+			actions: []action{
+				{cmd: rapidTo, x: 1.0, y: 1.0},
+				{cmd: setFeed, f: 1.0},
+				{cmd: linearTo, x: 2.0, y: 1.0},
+				{cmd: linearTo, x: 2.0, y: 2.0},
+				{cmd: linearTo, x: 1.0, y: 2.0},
+				{cmd: linearTo, x: 1.0, y: 1.0},
+				{cmd: rapidTo, x: 2.0, y: 0.0},
+				{cmd: linearTo, x: 3.0, y: 0.0},
+				{cmd: linearTo, x: 3.0, y: 1.0},
+				{cmd: linearTo, x: 2.0, y: 1.0},
+				{cmd: linearTo, x: 2.0, y: 0.0},
+			},
+		},
+		{s: `
+G21
+G90
+G0 X0 Y0
+G1 F1
+X1
+Y1
+X0
+Y0
+G92 X-1.5
+G0 X0 Y0
+G1 X1
+Y1
+X0
+Y0
+G92 Y-1.5
+G0 X0 Y0
+G1 X1
+Y1
+X0
+Y0
+G92 X1.5
+G0 X0 Y0
+G1 X1
+Y1
+X0
+Y0
+`,
+			actions: []action{
+				{cmd: setFeed, f: 1.0},
+				{cmd: linearTo, x: 1.0, y: 0.0},
+				{cmd: linearTo, x: 1.0, y: 1.0},
+				{cmd: linearTo, x: 0.0, y: 1.0},
+				{cmd: linearTo, x: 0.0, y: 0.0},
+
+				{cmd: rapidTo, x: 1.5, y: 0.0},
+				{cmd: linearTo, x: 2.5, y: 0.0},
+				{cmd: linearTo, x: 2.5, y: 1.0},
+				{cmd: linearTo, x: 1.5, y: 1.0},
+				{cmd: linearTo, x: 1.5, y: 0.0},
+
+				{cmd: rapidTo, x: 1.5, y: 1.5},
+				{cmd: linearTo, x: 2.5, y: 1.5},
+				{cmd: linearTo, x: 2.5, y: 2.5},
+				{cmd: linearTo, x: 1.5, y: 2.5},
+				{cmd: linearTo, x: 1.5, y: 1.5},
+
+				{cmd: rapidTo, x: 0.0, y: 1.5},
+				{cmd: linearTo, x: 1.0, y: 1.5},
+				{cmd: linearTo, x: 1.0, y: 2.5},
+				{cmd: linearTo, x: 0.0, y: 2.5},
+				{cmd: linearTo, x: 0.0, y: 1.5},
 			},
 		},
 	}
