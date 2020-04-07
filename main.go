@@ -22,11 +22,15 @@ import (
 
 type machine struct{}
 
+func (m machine) SetFeed(feed float64) error {
+	return nil
+}
+
 func (m machine) RapidTo(pos engine.Position) error {
 	return nil
 }
 
-func (m machine) LinearTo(pos engine.Position, feed float64) error {
+func (m machine) LinearTo(pos engine.Position) error {
 	return nil
 }
 

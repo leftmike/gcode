@@ -10,7 +10,8 @@ import (
 )
 
 const (
-	rapidTo = iota
+	setFeed = iota
+	rapidTo
 	linearTo
 )
 
@@ -37,12 +38,16 @@ func (m *machine) checkAction(act action) error {
 	return nil
 }
 
+func (m *machine) SetFeed(feed float64) error {
+	return m.checkAction(action{cmd: setFeed, f: feed})
+}
+
 func (m *machine) RapidTo(pos engine.Position) error {
 	return m.checkAction(action{cmd: rapidTo, x: pos.X, y: pos.Y, z: pos.Z})
 }
 
-func (m *machine) LinearTo(pos engine.Position, feed float64) error {
-	return m.checkAction(action{cmd: linearTo, x: pos.X, y: pos.Y, z: pos.Z, f: feed})
+func (m *machine) LinearTo(pos engine.Position) error {
+	return m.checkAction(action{cmd: linearTo, x: pos.X, y: pos.Y, z: pos.Z})
 }
 
 func TestEvaluate(t *testing.T) {
@@ -61,11 +66,11 @@ Y-1
 `,
 			actions: []action{
 				{cmd: rapidTo, x: 1.0, y: 1.0},
-				{cmd: linearTo, x: 1.0, y: 1.0, f: 1.0},
-				{cmd: linearTo, x: 2.0, y: 1.0, f: 1.0},
-				{cmd: linearTo, x: 2.0, y: 2.0, f: 1.0},
-				{cmd: linearTo, x: 1.0, y: 2.0, f: 1.0},
-				{cmd: linearTo, x: 1.0, y: 1.0, f: 1.0},
+				{cmd: setFeed, f: 1.0},
+				{cmd: linearTo, x: 2.0, y: 1.0},
+				{cmd: linearTo, x: 2.0, y: 2.0},
+				{cmd: linearTo, x: 1.0, y: 2.0},
+				{cmd: linearTo, x: 1.0, y: 1.0},
 			},
 		},
 		{s: `
@@ -82,11 +87,11 @@ Y-1
 `,
 			actions: []action{
 				{cmd: rapidTo, x: 1.0, y: 1.0},
-				{cmd: linearTo, x: 1.0, y: 1.0, f: 1.0},
-				{cmd: linearTo, x: 2.0, y: 1.0, f: 1.0},
-				{cmd: linearTo, x: 2.0, y: 2.0, f: 1.0},
-				{cmd: linearTo, x: 1.0, y: 2.0, f: 1.0},
-				{cmd: linearTo, x: 1.0, y: 1.0, f: 1.0},
+				{cmd: setFeed, f: 1.0},
+				{cmd: linearTo, x: 2.0, y: 1.0},
+				{cmd: linearTo, x: 2.0, y: 2.0},
+				{cmd: linearTo, x: 1.0, y: 2.0},
+				{cmd: linearTo, x: 1.0, y: 1.0},
 			},
 		},
 		{s: `
@@ -95,19 +100,18 @@ G0 X1 Y1
 G10 L20 P1 X0 Y0
 G54
 G91
-G1 F1
-X1
+G1 X1 F1
 Y1
 X-1
 Y-1
 `,
 			actions: []action{
 				{cmd: rapidTo, x: 1.0, y: 1.0},
-				{cmd: linearTo, x: 1.0, y: 1.0, f: 1.0},
-				{cmd: linearTo, x: 2.0, y: 1.0, f: 1.0},
-				{cmd: linearTo, x: 2.0, y: 2.0, f: 1.0},
-				{cmd: linearTo, x: 1.0, y: 2.0, f: 1.0},
-				{cmd: linearTo, x: 1.0, y: 1.0, f: 1.0},
+				{cmd: setFeed, f: 1.0},
+				{cmd: linearTo, x: 2.0, y: 1.0},
+				{cmd: linearTo, x: 2.0, y: 2.0},
+				{cmd: linearTo, x: 1.0, y: 2.0},
+				{cmd: linearTo, x: 1.0, y: 1.0},
 			},
 		},
 		{s: `
@@ -126,11 +130,11 @@ Y-1
 			actions: []action{
 				{cmd: rapidTo, x: 1.0, y: 1.0},
 				{cmd: rapidTo, x: 2.0, y: 2.0},
-				{cmd: linearTo, x: 2.0, y: 2.0, f: 1.0},
-				{cmd: linearTo, x: 3.0, y: 2.0, f: 1.0},
-				{cmd: linearTo, x: 3.0, y: 3.0, f: 1.0},
-				{cmd: linearTo, x: 2.0, y: 3.0, f: 1.0},
-				{cmd: linearTo, x: 2.0, y: 2.0, f: 1.0},
+				{cmd: setFeed, f: 1.0},
+				{cmd: linearTo, x: 3.0, y: 2.0},
+				{cmd: linearTo, x: 3.0, y: 3.0},
+				{cmd: linearTo, x: 2.0, y: 3.0},
+				{cmd: linearTo, x: 2.0, y: 2.0},
 			},
 		},
 	}

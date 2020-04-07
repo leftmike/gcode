@@ -21,10 +21,9 @@ var (
 )
 
 type Machine interface {
-	// XXX: Feed(feed float64) error
-	// XXX: don't do move if position has not changed
+	SetFeed(feed float64) error
 	RapidTo(pos Position) error
-	LinearTo(pos Position, feed float64) error
+	LinearTo(pos Position) error
 }
 
 type moveMode byte
@@ -40,7 +39,6 @@ type engine struct {
 	machine      Machine
 	dialect      parser.Dialect
 	numParams    map[int]parser.Number
-	feed         float64
 	units        float64 // 1.0 for mm and 25.4 for in
 	homePos      Position
 	curPos       Position
@@ -58,7 +56,6 @@ func NewEngine(m Machine, d parser.Dialect) *engine {
 		machine:     m,
 		dialect:     d,
 		numParams:   map[int]parser.Number{},
-		feed:        0.0,
 		units:       1.0, // default units is mm
 		homePos:     zeroPosition,
 		curPos:      zeroPosition, // default current position at home
@@ -86,6 +83,34 @@ func (eng *engine) getNumParam(num int) (parser.Number, error) {
 
 func (eng *engine) setNumParam(num int, val parser.Number) error {
 	eng.numParams[num] = val
+	return nil
+}
+
+func (eng *engine) setFeed(feed float64) error {
+	return eng.machine.SetFeed(feed)
+}
+
+func (eng *engine) rapidTo(pos Position) error {
+	if pos == eng.curPos {
+		return nil
+	}
+	err := eng.machine.RapidTo(pos)
+	if err != nil {
+		return err
+	}
+	eng.curPos = pos
+	return nil
+}
+
+func (eng *engine) linearTo(pos Position) error {
+	if pos == eng.curPos {
+		return nil
+	}
+	err := eng.machine.LinearTo(pos)
+	if err != nil {
+		return err
+	}
+	eng.curPos = pos
 	return nil
 }
 
@@ -202,7 +227,10 @@ func (eng *engine) moveTo(codes []parser.Code) ([]parser.Code, error) {
 	for _, axis := range axes {
 		switch axis.letter {
 		case 'F':
-			eng.feed = float64(axis.num) * eng.units
+			err = eng.setFeed(float64(axis.num) * eng.units)
+			if err != nil {
+				return nil, err
+			}
 		case 'X':
 			pos.X = eng.toMachineX(float64(axis.num)*eng.units, eng.absoluteMode)
 		case 'Y':
@@ -214,16 +242,15 @@ func (eng *engine) moveTo(codes []parser.Code) ([]parser.Code, error) {
 
 	switch eng.moveMode {
 	case rapidMove:
-		err = eng.machine.RapidTo(pos)
+		err = eng.rapidTo(pos)
 	case linearMove:
-		err = eng.machine.LinearTo(pos, eng.feed)
+		err = eng.linearTo(pos)
 	default:
 		panic(fmt.Sprintf("unexpected moveMode: %d", eng.moveMode))
 	}
 	if err != nil {
 		return nil, err
 	}
-	eng.curPos = pos
 
 	return codes, nil
 }
@@ -388,11 +415,10 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 					eng.units = 1.0
 				} else if num.Equal(28.0) { // G28: home the machine
 					// XXX: handle the optional waypoint to go through
-					err = eng.machine.RapidTo(eng.homePos)
+					err = eng.rapidTo(eng.homePos)
 					if err != nil {
 						return err
 					}
-					eng.curPos = eng.homePos
 				} else if num.Equal(54.0) { // G54: use coordinate system one
 					eng.curCoordSys = 0
 				} else if num.Equal(55.0) { // G54: use coordinate system two
