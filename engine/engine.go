@@ -21,6 +21,8 @@ var (
 )
 
 type Machine interface {
+	// XXX: Feed(feed float64) error
+	// XXX: don't do move if position has not changed
 	RapidTo(pos Position) error
 	LinearTo(pos Position, feed float64) error
 }
@@ -166,7 +168,7 @@ func requireAxis(axes []axis, letter parser.Letter) (parser.Number, error) {
 
 func (eng *engine) toMachineX(x float64, absolute bool) float64 {
 	if absolute {
-		return eng.coordSysPos[eng.curCoordSys].X + eng.workPos.X + x
+		return x - eng.coordSysPos[eng.curCoordSys].X - eng.workPos.X
 	}
 	// relative
 	return eng.curPos.X + x
@@ -174,7 +176,7 @@ func (eng *engine) toMachineX(x float64, absolute bool) float64 {
 
 func (eng *engine) toMachineY(y float64, absolute bool) float64 {
 	if absolute {
-		return eng.coordSysPos[eng.curCoordSys].Y + eng.workPos.Y + y
+		return y - eng.coordSysPos[eng.curCoordSys].Y - eng.workPos.Y
 	}
 	// relative
 	return eng.curPos.Y + y
@@ -182,7 +184,7 @@ func (eng *engine) toMachineY(y float64, absolute bool) float64 {
 
 func (eng *engine) toMachineZ(z float64, absolute bool) float64 {
 	if absolute {
-		return eng.coordSysPos[eng.curCoordSys].Z + eng.workPos.Z + z
+		return z - eng.coordSysPos[eng.curCoordSys].Z - eng.workPos.Z
 	}
 	// relative
 	return eng.curPos.Z + z
@@ -262,19 +264,19 @@ func (eng *engine) setCoordinateSystemPosition(axes []axis, machine bool) error 
 			if machine {
 				eng.coordSysPos[coordSys].X = float64(axis.num) * eng.units
 			} else {
-				eng.coordSysPos[coordSys].X = eng.curPos.X + float64(axis.num)*eng.units
+				eng.coordSysPos[coordSys].X = float64(axis.num)*eng.units - eng.curPos.X
 			}
 		case 'Y':
 			if machine {
 				eng.coordSysPos[coordSys].Y = float64(axis.num) * eng.units
 			} else {
-				eng.coordSysPos[coordSys].Y = eng.curPos.Y + float64(axis.num)*eng.units
+				eng.coordSysPos[coordSys].Y = float64(axis.num)*eng.units - eng.curPos.Y
 			}
 		case 'Z':
 			if machine {
 				eng.coordSysPos[coordSys].Z = float64(axis.num) * eng.units
 			} else {
-				eng.coordSysPos[coordSys].Z = eng.curPos.Z + float64(axis.num)*eng.units
+				eng.coordSysPos[coordSys].Z = float64(axis.num)*eng.units - eng.curPos.Z
 			}
 		}
 	}
