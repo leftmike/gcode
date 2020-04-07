@@ -114,59 +114,58 @@ func (eng *engine) linearTo(pos Position) error {
 	return nil
 }
 
-// XXX: consider changing axis/axes to arg/args
-type axis struct {
+type arg struct {
 	letter parser.Letter
 	num    parser.Number
 }
 
-type axes int
+type argSet int
 
 const (
-	fAxis = 1 << iota
-	lAxis
-	pAxis
-	xAxis
-	yAxis
-	zAxis
+	fArg = 1 << iota
+	lArg
+	pArg
+	xArg
+	yArg
+	zArg
 )
 
-func parseAxes(codes []parser.Code, allowed axes) ([]axis, []parser.Code, error) {
-	var axes []axis
+func parseArgs(codes []parser.Code, allowed argSet) ([]arg, []parser.Code, error) {
+	var args []arg
 	for len(codes) > 0 {
 		code := codes[0]
 		switch code.Letter {
 		case 'F':
-			if (allowed & fAxis) == 0 {
-				return nil, nil, fmt.Errorf("axis not allowed: %s", code)
+			if (allowed & fArg) == 0 {
+				return nil, nil, fmt.Errorf("arg not allowed: %s", code)
 			}
 		case 'L':
-			if (allowed & lAxis) == 0 {
-				return nil, nil, fmt.Errorf("axis not allowed: %s", code)
+			if (allowed & lArg) == 0 {
+				return nil, nil, fmt.Errorf("arg not allowed: %s", code)
 			}
 		case 'P':
-			if (allowed & pAxis) == 0 {
-				return nil, nil, fmt.Errorf("axis not allowed: %s", code)
+			if (allowed & pArg) == 0 {
+				return nil, nil, fmt.Errorf("arg not allowed: %s", code)
 			}
 		case 'X':
-			if (allowed & xAxis) == 0 {
-				return nil, nil, fmt.Errorf("axis not allowed: %s", code)
+			if (allowed & xArg) == 0 {
+				return nil, nil, fmt.Errorf("arg not allowed: %s", code)
 			}
 		case 'Y':
-			if (allowed & yAxis) == 0 {
-				return nil, nil, fmt.Errorf("axis not allowed: %s", code)
+			if (allowed & yArg) == 0 {
+				return nil, nil, fmt.Errorf("arg not allowed: %s", code)
 			}
 		case 'Z':
-			if (allowed & zAxis) == 0 {
-				return nil, nil, fmt.Errorf("axis not allowed: %s", code)
+			if (allowed & zArg) == 0 {
+				return nil, nil, fmt.Errorf("arg not allowed: %s", code)
 			}
 		default:
 			break
 		}
 
-		for _, axis := range axes {
-			if axis.letter == code.Letter {
-				fmt.Errorf("duplicate axis specified: %s", code)
+		for _, arg := range args {
+			if arg.letter == code.Letter {
+				fmt.Errorf("duplicate arg specified: %s", code)
 			}
 		}
 		num, ok := code.Value.AsNumber()
@@ -174,21 +173,21 @@ func parseAxes(codes []parser.Code, allowed axes) ([]axis, []parser.Code, error)
 			return nil, nil, fmt.Errorf("expected a number: %v", code.Value)
 		}
 
-		axes = append(axes, axis{code.Letter, num})
+		args = append(args, arg{code.Letter, num})
 		codes = codes[1:]
 	}
 
-	return axes, codes, nil
+	return args, codes, nil
 }
 
-func requireAxis(axes []axis, letter parser.Letter) (parser.Number, error) {
-	for _, axis := range axes {
-		if axis.letter == letter {
-			return axis.num, nil
+func requireArg(args []arg, letter parser.Letter) (parser.Number, error) {
+	for _, arg := range args {
+		if arg.letter == letter {
+			return arg.num, nil
 		}
 	}
 
-	return 0, fmt.Errorf("missing require axis: %c", letter)
+	return 0, fmt.Errorf("missing require arg: %c", letter)
 }
 
 func (eng *engine) toMachineX(x float64, absolute bool) float64 {
@@ -217,26 +216,26 @@ func (eng *engine) toMachineZ(z float64, absolute bool) float64 {
 
 func (eng *engine) moveTo(codes []parser.Code) ([]parser.Code, error) {
 	var err error
-	var axes []axis
-	axes, codes, err = parseAxes(codes, fAxis|xAxis|yAxis|zAxis)
+	var args []arg
+	args, codes, err = parseArgs(codes, fArg|xArg|yArg|zArg)
 	if err != nil {
 		return nil, err
 	}
 
 	pos := eng.curPos
-	for _, axis := range axes {
-		switch axis.letter {
+	for _, arg := range args {
+		switch arg.letter {
 		case 'F':
-			err = eng.setFeed(float64(axis.num) * eng.units)
+			err = eng.setFeed(float64(arg.num) * eng.units)
 			if err != nil {
 				return nil, err
 			}
 		case 'X':
-			pos.X = eng.toMachineX(float64(axis.num)*eng.units, eng.absoluteMode)
+			pos.X = eng.toMachineX(float64(arg.num)*eng.units, eng.absoluteMode)
 		case 'Y':
-			pos.Y = eng.toMachineY(float64(axis.num)*eng.units, eng.absoluteMode)
+			pos.Y = eng.toMachineY(float64(arg.num)*eng.units, eng.absoluteMode)
 		case 'Z':
-			pos.Z = eng.toMachineZ(float64(axis.num)*eng.units, eng.absoluteMode)
+			pos.Z = eng.toMachineZ(float64(arg.num)*eng.units, eng.absoluteMode)
 		}
 	}
 
@@ -255,8 +254,8 @@ func (eng *engine) moveTo(codes []parser.Code) ([]parser.Code, error) {
 	return codes, nil
 }
 
-func (eng *engine) setCoordinateSystemPosition(axes []axis, machine bool) error {
-	p, err := requireAxis(axes, 'P')
+func (eng *engine) setCoordinateSystemPosition(args []arg, machine bool) error {
+	p, err := requireArg(args, 'P')
 	if err != nil {
 		return err
 	}
@@ -285,25 +284,25 @@ func (eng *engine) setCoordinateSystemPosition(axes []axis, machine bool) error 
 		return fmt.Errorf("expected a coordinate system: P%s", p)
 	}
 
-	for _, axis := range axes {
-		switch axis.letter {
+	for _, arg := range args {
+		switch arg.letter {
 		case 'X':
 			if machine {
-				eng.coordSysPos[coordSys].X = float64(axis.num) * eng.units
+				eng.coordSysPos[coordSys].X = float64(arg.num) * eng.units
 			} else {
-				eng.coordSysPos[coordSys].X = float64(axis.num)*eng.units - eng.curPos.X
+				eng.coordSysPos[coordSys].X = float64(arg.num)*eng.units - eng.curPos.X
 			}
 		case 'Y':
 			if machine {
-				eng.coordSysPos[coordSys].Y = float64(axis.num) * eng.units
+				eng.coordSysPos[coordSys].Y = float64(arg.num) * eng.units
 			} else {
-				eng.coordSysPos[coordSys].Y = float64(axis.num)*eng.units - eng.curPos.Y
+				eng.coordSysPos[coordSys].Y = float64(arg.num)*eng.units - eng.curPos.Y
 			}
 		case 'Z':
 			if machine {
-				eng.coordSysPos[coordSys].Z = float64(axis.num) * eng.units
+				eng.coordSysPos[coordSys].Z = float64(arg.num) * eng.units
 			} else {
-				eng.coordSysPos[coordSys].Z = float64(axis.num)*eng.units - eng.curPos.Z
+				eng.coordSysPos[coordSys].Z = float64(arg.num)*eng.units - eng.curPos.Z
 			}
 		}
 	}
@@ -313,24 +312,24 @@ func (eng *engine) setCoordinateSystemPosition(axes []axis, machine bool) error 
 
 func (eng *engine) modifyPositions(codes []parser.Code) ([]parser.Code, error) {
 	var err error
-	var axes []axis
-	axes, codes, err = parseAxes(codes, lAxis|pAxis|xAxis|yAxis|zAxis)
+	var args []arg
+	args, codes, err = parseArgs(codes, lArg|pArg|xArg|yArg|zArg)
 	if err != nil {
 		return nil, err
 	}
-	l, err := requireAxis(axes, 'L')
+	l, err := requireArg(args, 'L')
 	if err != nil {
 		return nil, err
 	}
 
 	if l.Equal(2.0) { // G10 L2: set coordinate system offset (machine)
-		err = eng.setCoordinateSystemPosition(axes, true)
+		err = eng.setCoordinateSystemPosition(args, true)
 		if err != nil {
 			return nil, err
 		}
 		return codes, nil
 	} else if l.Equal(20.0) { // G10 L20: set coordinate system offset (relative)
-		err = eng.setCoordinateSystemPosition(axes, false)
+		err = eng.setCoordinateSystemPosition(args, false)
 		if err != nil {
 			return nil, err
 		}
@@ -342,23 +341,23 @@ func (eng *engine) modifyPositions(codes []parser.Code) ([]parser.Code, error) {
 
 func (eng *engine) setWorkPosition(codes []parser.Code) ([]parser.Code, error) {
 	var err error
-	var axes []axis
-	axes, codes, err = parseAxes(codes, xAxis|yAxis|zAxis)
+	var args []arg
+	args, codes, err = parseArgs(codes, xArg|yArg|zArg)
 	if err != nil {
 		return nil, err
 	}
-	if len(axes) == 0 {
-		return nil, errors.New("expected at least one X, Y, or Z axis")
+	if len(args) == 0 {
+		return nil, errors.New("expected at least one X, Y, or Z arg")
 	}
 
-	for _, axis := range axes {
-		switch axis.letter {
+	for _, arg := range args {
+		switch arg.letter {
 		case 'X':
-			eng.workPos.X += eng.toMachineX(float64(axis.num)*eng.units, true) - eng.curPos.X
+			eng.workPos.X += eng.toMachineX(float64(arg.num)*eng.units, true) - eng.curPos.X
 		case 'Y':
-			eng.workPos.Y += eng.toMachineY(float64(axis.num)*eng.units, true) - eng.curPos.Y
+			eng.workPos.Y += eng.toMachineY(float64(arg.num)*eng.units, true) - eng.curPos.Y
 		case 'Z':
-			eng.workPos.Z += eng.toMachineZ(float64(axis.num)*eng.units, true) - eng.curPos.Z
+			eng.workPos.Z += eng.toMachineZ(float64(arg.num)*eng.units, true) - eng.curPos.Z
 		}
 	}
 
@@ -476,7 +475,7 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 						return err
 					}
 				} else {
-					return fmt.Errorf("axis not allowed: %s", code)
+					return fmt.Errorf("arg not allowed: %s", code)
 				}
 			case 'X', 'Y', 'Z':
 				switch eng.moveMode {
@@ -486,7 +485,7 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 						return err
 					}
 				default:
-					return fmt.Errorf("axis not allowed: %s", code)
+					return fmt.Errorf("arg not allowed: %s", code)
 				}
 			default:
 				return fmt.Errorf("unexpected code: %s", code)
