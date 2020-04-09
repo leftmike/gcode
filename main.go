@@ -8,6 +8,8 @@ To Do:
 -- #1 to #30 are subroutine parameters and are local to the subroutine
 -- #<name> are local to the scope where it is assigned; scoped to subroutines
 -- #31 and above, and #<_name> are global
+- G10 L2: support R for rotation
+- predefined parameters
 */
 
 import (

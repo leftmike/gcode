@@ -41,6 +41,7 @@ type engine struct {
 	numParams    map[int]parser.Number
 	units        float64 // 1.0 for mm and 25.4 for in
 	homePos      Position
+	secondPos    Position
 	curPos       Position
 	maxPos       Position
 	curCoordSys  int
@@ -58,6 +59,7 @@ func NewEngine(m Machine, d parser.Dialect) *engine {
 		numParams:   map[int]parser.Number{},
 		units:       1.0, // default units is mm
 		homePos:     zeroPosition,
+		secondPos:   zeroPosition,
 		curPos:      zeroPosition, // default current position at home
 		maxPos:      Position{mmPerInch * 12.0, mmPerInch * 12.0, mmPerInch * 4.0},
 		curCoordSys: 0,
@@ -254,6 +256,49 @@ func (eng *engine) moveTo(codes []parser.Code) ([]parser.Code, error) {
 	return codes, nil
 }
 
+func (eng *engine) moveToPredefined(codes []parser.Code, pos Position) ([]parser.Code, error) {
+	var err error
+	var args []arg
+	args, codes, err = parseArgs(codes, xArg|yArg|zArg)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(args) == 0 {
+		err = eng.rapidTo(pos)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		way := eng.curPos
+		final := eng.curPos
+		for _, arg := range args {
+			switch arg.letter {
+			case 'X':
+				way.X = eng.toMachineX(float64(arg.num)*eng.units, eng.absoluteMode)
+				final.X = pos.X
+			case 'Y':
+				way.Y = eng.toMachineY(float64(arg.num)*eng.units, eng.absoluteMode)
+				final.Y = pos.Y
+			case 'Z':
+				way.Z = eng.toMachineZ(float64(arg.num)*eng.units, eng.absoluteMode)
+				final.Z = pos.Z
+			}
+		}
+
+		err = eng.rapidTo(way)
+		if err != nil {
+			return nil, err
+		}
+		err = eng.rapidTo(final)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return codes, nil
+}
+
 func (eng *engine) setCoordinateSystemPosition(args []arg, machine bool) error {
 	p, err := requireArg(args, 'P')
 	if err != nil {
@@ -360,6 +405,7 @@ func (eng *engine) setWorkPosition(codes []parser.Code) ([]parser.Code, error) {
 			eng.workPos.Z += eng.toMachineZ(float64(arg.num)*eng.units, true) - eng.curPos.Z
 		}
 	}
+	eng.savedWorkPos = eng.workPos
 
 	return codes, nil
 }
@@ -412,29 +458,37 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 					eng.units = mmPerInch
 				} else if num.Equal(21.0) { // G21: coordinates in mm
 					eng.units = 1.0
-				} else if num.Equal(28.0) { // G28: home the machine
-					// XXX: handle the optional waypoint to go through
-					err = eng.rapidTo(eng.homePos)
+				} else if num.Equal(28.0) { // G28: go home
+					codes, err = eng.moveToPredefined(codes, eng.homePos)
 					if err != nil {
 						return err
 					}
+				} else if num.Equal(28.1) { // G28.1: set home
+					eng.homePos = eng.curPos
+				} else if num.Equal(30.0) { // G30: go predefined position
+					codes, err = eng.moveToPredefined(codes, eng.secondPos)
+					if err != nil {
+						return err
+					}
+				} else if num.Equal(30.1) { // G30.1: set predefined position
+					eng.secondPos = eng.curPos
 				} else if num.Equal(54.0) { // G54: use coordinate system one
 					eng.curCoordSys = 0
-				} else if num.Equal(55.0) { // G54: use coordinate system two
+				} else if num.Equal(55.0) { // G55: use coordinate system two
 					eng.curCoordSys = 1
-				} else if num.Equal(56.0) { // G54: use coordinate system three
+				} else if num.Equal(56.0) { // G56: use coordinate system three
 					eng.curCoordSys = 2
-				} else if num.Equal(57.0) { // G54: use coordinate system four
+				} else if num.Equal(57.0) { // G57: use coordinate system four
 					eng.curCoordSys = 3
-				} else if num.Equal(58.0) { // G54: use coordinate system five
+				} else if num.Equal(58.0) { // G58: use coordinate system five
 					eng.curCoordSys = 4
-				} else if num.Equal(59.0) { // G54: use coordinate system six
+				} else if num.Equal(59.0) { // G59: use coordinate system six
 					eng.curCoordSys = 5
-				} else if num.Equal(59.1) { // G54: use coordinate system seven
+				} else if num.Equal(59.1) { // G59.1: use coordinate system seven
 					eng.curCoordSys = 6
-				} else if num.Equal(59.2) { // G54: use coordinate system eight
+				} else if num.Equal(59.2) { // G59.2: use coordinate system eight
 					eng.curCoordSys = 7
-				} else if num.Equal(59.3) { // G54: use coordinate system nine
+				} else if num.Equal(59.3) { // G59.3: use coordinate system nine
 					eng.curCoordSys = 8
 				} else if num.Equal(90.0) { // G90: absolute distance mode
 					eng.absoluteMode = true
