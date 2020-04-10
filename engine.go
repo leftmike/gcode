@@ -1,11 +1,9 @@
-package engine
+package gcode
 
 import (
 	"errors"
 	"fmt"
 	"io"
-
-	parser "github.com/leftmike/gcode/parser"
 )
 
 const (
@@ -37,8 +35,8 @@ const (
 
 type engine struct {
 	machine      Machine
-	dialect      parser.Dialect
-	numParams    map[int]parser.Number
+	dialect      Dialect
+	numParams    map[int]Number
 	units        float64 // 1.0 for mm and 25.4 for in
 	homePos      Position
 	secondPos    Position
@@ -52,11 +50,11 @@ type engine struct {
 	absoluteMode bool
 }
 
-func NewEngine(m Machine, d parser.Dialect) *engine {
+func NewEngine(m Machine, d Dialect) *engine {
 	return &engine{
 		machine:     m,
 		dialect:     d,
-		numParams:   map[int]parser.Number{},
+		numParams:   map[int]Number{},
 		units:       1.0, // default units is mm
 		homePos:     zeroPosition,
 		secondPos:   zeroPosition,
@@ -75,7 +73,7 @@ func NewEngine(m Machine, d parser.Dialect) *engine {
 	}
 }
 
-func (eng *engine) getNumParam(num int) (parser.Number, error) {
+func (eng *engine) getNumParam(num int) (Number, error) {
 	val, ok := eng.numParams[num]
 	if !ok {
 		return 0, fmt.Errorf("engine: number parameter %d not found", num)
@@ -83,7 +81,7 @@ func (eng *engine) getNumParam(num int) (parser.Number, error) {
 	return val, nil
 }
 
-func (eng *engine) setNumParam(num int, val parser.Number) error {
+func (eng *engine) setNumParam(num int, val Number) error {
 	eng.numParams[num] = val
 	return nil
 }
@@ -117,8 +115,8 @@ func (eng *engine) linearTo(pos Position) error {
 }
 
 type arg struct {
-	letter parser.Letter
-	num    parser.Number
+	letter Letter
+	num    Number
 }
 
 type argSet int
@@ -132,7 +130,7 @@ const (
 	zArg
 )
 
-func parseArgs(codes []parser.Code, allowed argSet) ([]arg, []parser.Code, error) {
+func parseArgs(codes []Code, allowed argSet) ([]arg, []Code, error) {
 	var args []arg
 	for len(codes) > 0 {
 		code := codes[0]
@@ -182,7 +180,7 @@ func parseArgs(codes []parser.Code, allowed argSet) ([]arg, []parser.Code, error
 	return args, codes, nil
 }
 
-func requireArg(args []arg, letter parser.Letter) (parser.Number, error) {
+func requireArg(args []arg, letter Letter) (Number, error) {
 	for _, arg := range args {
 		if arg.letter == letter {
 			return arg.num, nil
@@ -216,7 +214,7 @@ func (eng *engine) toMachineZ(z float64, absolute bool) float64 {
 	return eng.curPos.Z + z
 }
 
-func (eng *engine) moveTo(codes []parser.Code) ([]parser.Code, error) {
+func (eng *engine) moveTo(codes []Code) ([]Code, error) {
 	var err error
 	var args []arg
 	args, codes, err = parseArgs(codes, fArg|xArg|yArg|zArg)
@@ -256,7 +254,7 @@ func (eng *engine) moveTo(codes []parser.Code) ([]parser.Code, error) {
 	return codes, nil
 }
 
-func (eng *engine) moveToPredefined(codes []parser.Code, pos Position) ([]parser.Code, error) {
+func (eng *engine) moveToPredefined(codes []Code, pos Position) ([]Code, error) {
 	var err error
 	var args []arg
 	args, codes, err = parseArgs(codes, xArg|yArg|zArg)
@@ -355,7 +353,7 @@ func (eng *engine) setCoordinateSystemPosition(args []arg, machine bool) error {
 	return nil
 }
 
-func (eng *engine) modifyPositions(codes []parser.Code) ([]parser.Code, error) {
+func (eng *engine) modifyPositions(codes []Code) ([]Code, error) {
 	var err error
 	var args []arg
 	args, codes, err = parseArgs(codes, lArg|pArg|xArg|yArg|zArg)
@@ -384,7 +382,7 @@ func (eng *engine) modifyPositions(codes []parser.Code) ([]parser.Code, error) {
 	return nil, fmt.Errorf("unexpected L value to G10: L%s", l)
 }
 
-func (eng *engine) setWorkPosition(codes []parser.Code) ([]parser.Code, error) {
+func (eng *engine) setWorkPosition(codes []Code) ([]Code, error) {
 	var err error
 	var args []arg
 	args, codes, err = parseArgs(codes, xArg|yArg|zArg)
@@ -411,7 +409,7 @@ func (eng *engine) setWorkPosition(codes []parser.Code) ([]parser.Code, error) {
 }
 
 func (eng *engine) Evaluate(s io.ByteScanner) error {
-	p := parser.Parser{
+	p := Parser{
 		Scanner:     s,
 		Dialect:     eng.dialect,
 		GetNumParam: eng.getNumParam,

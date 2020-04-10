@@ -1,12 +1,11 @@
-package engine_test
+package gcode_test
 
 import (
 	"fmt"
 	"strings"
 	"testing"
 
-	engine "github.com/leftmike/gcode/engine"
-	parser "github.com/leftmike/gcode/parser"
+	"github.com/leftmike/gcode"
 )
 
 const (
@@ -46,11 +45,11 @@ func (m *machine) SetFeed(feed float64) error {
 	return m.checkAction(action{cmd: setFeed, f: feed})
 }
 
-func (m *machine) RapidTo(pos engine.Position) error {
+func (m *machine) RapidTo(pos gcode.Position) error {
 	return m.checkAction(action{cmd: rapidTo, x: pos.X, y: pos.Y, z: pos.Z})
 }
 
-func (m *machine) LinearTo(pos engine.Position) error {
+func (m *machine) LinearTo(pos gcode.Position) error {
 	return m.checkAction(action{cmd: linearTo, x: pos.X, y: pos.Y, z: pos.Z})
 }
 
@@ -686,7 +685,7 @@ Y-1
 	}
 
 	for i, c := range cases {
-		eng := engine.NewEngine(&machine{actions: c.actions}, parser.BeagleG)
+		eng := gcode.NewEngine(&machine{actions: c.actions}, gcode.BeagleG)
 		err := eng.Evaluate(strings.NewReader(c.s))
 		if err != nil {
 			t.Errorf("Evaluate(%d) failed: %s", i, err)
@@ -842,7 +841,7 @@ Y-1
 
 	for _, cs := range []string{"56", "57", "58", "59", "59.1", "59.2", "59.3"} {
 		for i, c := range cases {
-			eng := engine.NewEngine(&machine{actions: c.actions}, parser.BeagleG)
+			eng := gcode.NewEngine(&machine{actions: c.actions}, gcode.BeagleG)
 			err := eng.Evaluate(strings.NewReader(fmt.Sprintf(c.s, cs)))
 			if err != nil {
 				t.Errorf("Evaluate(%d) failed: %s", i, err)
@@ -872,7 +871,7 @@ func TestEvaluateFail(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		eng := engine.NewEngine(&machine{}, parser.BeagleG)
+		eng := gcode.NewEngine(&machine{}, gcode.BeagleG)
 		err := eng.Evaluate(strings.NewReader(c))
 		if err == nil {
 			t.Errorf("Evaluate(%s) did not fail", c)
