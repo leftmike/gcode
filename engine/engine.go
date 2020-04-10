@@ -323,7 +323,7 @@ func (eng *engine) setCoordinateSystemPosition(args []arg, machine bool) error {
 		coordSys = 6
 	} else if p.Equal(8.0) {
 		coordSys = 7
-	} else if p.Equal(1.0) {
+	} else if p.Equal(9.0) {
 		coordSys = 8
 	} else {
 		return fmt.Errorf("expected a coordinate system: P%s", p)
@@ -452,7 +452,7 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 				} else if num.Equal(10.0) { // G10
 					codes, err = eng.modifyPositions(codes)
 					if err != nil {
-						return nil
+						return err
 					}
 				} else if num.Equal(20.0) { // G20: coordinates in inches
 					eng.units = mmPerInch

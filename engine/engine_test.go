@@ -31,7 +31,7 @@ func (m *machine) checkAction(act action) error {
 	}
 
 	if act != m.actions[m.adx] {
-		return fmt.Errorf("test: expected %#v; got %#v", m.actions[m.adx], act)
+		return fmt.Errorf("test: at %d expected %#v; got %#v", m.adx, m.actions[m.adx], act)
 	}
 
 	m.adx += 1
@@ -58,7 +58,7 @@ func TestEvaluate(t *testing.T) {
 		{s: `
 G21
 G91
-G0 X1 Y1
+G0 X1 Y1 Z1
 G1 F1
 X1
 Y1
@@ -66,12 +66,80 @@ X-1
 Y-1
 `,
 			actions: []action{
-				{cmd: rapidTo, x: 1.0, y: 1.0},
+				{cmd: rapidTo, x: 1.0, y: 1.0, z: 1.0},
 				{cmd: setFeed, f: 1.0},
-				{cmd: linearTo, x: 2.0, y: 1.0},
-				{cmd: linearTo, x: 2.0, y: 2.0},
-				{cmd: linearTo, x: 1.0, y: 2.0},
-				{cmd: linearTo, x: 1.0, y: 1.0},
+				{cmd: linearTo, x: 2.0, y: 1.0, z: 1.0},
+				{cmd: linearTo, x: 2.0, y: 2.0, z: 1.0},
+				{cmd: linearTo, x: 1.0, y: 2.0, z: 1.0},
+				{cmd: linearTo, x: 1.0, y: 1.0, z: 1.0},
+			},
+		},
+		{s: `
+G20
+G91
+G0 X0 Y0
+G1 F1
+X1
+Y1
+X-1
+Y-1
+`,
+			actions: []action{
+				{cmd: setFeed, f: 25.4},
+				{cmd: linearTo, x: 25.4, y: 0.0},
+				{cmd: linearTo, x: 25.4, y: 25.4},
+				{cmd: linearTo, x: 0.0, y: 25.4},
+				{cmd: linearTo, x: 0.0, y: 0.0},
+			},
+		},
+		{s: `
+G21
+G90
+G0 X2 Y2 Z2
+G28.1
+G0 X4 Y4 Z0
+G28 Z1
+G91
+G1 F1 X1
+Y1
+X-1
+Y-1
+`,
+			actions: []action{
+				{cmd: rapidTo, x: 2.0, y: 2.0, z: 2.0},
+				{cmd: rapidTo, x: 4.0, y: 4.0, z: 0.0},
+				{cmd: rapidTo, x: 4.0, y: 4.0, z: 1.0},
+				{cmd: rapidTo, x: 4.0, y: 4.0, z: 2.0},
+				{cmd: setFeed, f: 1.0},
+				{cmd: linearTo, x: 5.0, y: 4.0, z: 2.0},
+				{cmd: linearTo, x: 5.0, y: 5.0, z: 2.0},
+				{cmd: linearTo, x: 4.0, y: 5.0, z: 2.0},
+				{cmd: linearTo, x: 4.0, y: 4.0, z: 2.0},
+			},
+		},
+		{s: `
+G21
+G90
+G0 X2 Y2 Z2
+G28.1
+G0 X4 Y4 Z0
+G28 X1 Y1
+G91
+G1 F1 X1
+Y1
+X-1
+Y-1
+`,
+			actions: []action{
+				{cmd: rapidTo, x: 2.0, y: 2.0, z: 2.0},
+				{cmd: rapidTo, x: 4.0, y: 4.0, z: 0.0},
+				{cmd: rapidTo, x: 1.0, y: 1.0, z: 0.0},
+				{cmd: rapidTo, x: 2.0, y: 2.0, z: 0.0},
+				{cmd: setFeed, f: 1.0},
+				{cmd: linearTo, x: 3.0, y: 2.0, z: 0.0},
+				{cmd: linearTo, x: 3.0, y: 3.0, z: 0.0},
+				{cmd: linearTo, x: 2.0, y: 3.0, z: 0.0},
+				{cmd: linearTo, x: 2.0, y: 2.0, z: 0.0},
 			},
 		},
 		{s: `
@@ -117,12 +185,13 @@ Y-1
 		},
 		{s: `
 G21
+G56
+G10 L2 P0 X-1 Y-1
 G90
-G0 X1 Y1
-G10 L20 P1 X0 Y0
-G54
+G0 X0 Y0
 G91
-G1 X1 F1
+G1 F1
+X1
 Y1
 X-1
 Y-1
@@ -134,6 +203,27 @@ Y-1
 				{cmd: linearTo, x: 2.0, y: 2.0},
 				{cmd: linearTo, x: 1.0, y: 2.0},
 				{cmd: linearTo, x: 1.0, y: 1.0},
+			},
+		},
+		{s: `
+G21
+G90
+G0 X1 Y1 Z1
+G10 L20 P1 X0 Y0 Z0
+G54
+G91
+G1 X1 F1
+Y1
+X-1
+Y-1
+`,
+			actions: []action{
+				{cmd: rapidTo, x: 1.0, y: 1.0, z: 1.0},
+				{cmd: setFeed, f: 1.0},
+				{cmd: linearTo, x: 2.0, y: 1.0, z: 1.0},
+				{cmd: linearTo, x: 2.0, y: 2.0, z: 1.0},
+				{cmd: linearTo, x: 1.0, y: 2.0, z: 1.0},
+				{cmd: linearTo, x: 1.0, y: 1.0, z: 1.0},
 			},
 		},
 		{s: `
@@ -286,26 +376,26 @@ Y0
 		{s: `
 G21
 G90
-G92 X-1.5
-G0 X0 Y0
+G92 X-1.5 Z-1.0
+G0 X0 Y0 Z0
 G1 F1 X1
 Y1
 X0
 Y0
 G92.1
-G0 X0 Y0
+G0 X0 Y0 Z0
 G1 X1
 Y1
 X0
 Y0
 `,
 			actions: []action{
-				{cmd: rapidTo, x: 1.5, y: 0.0},
+				{cmd: rapidTo, x: 1.5, y: 0.0, z: 1.0},
 				{cmd: setFeed, f: 1.0},
-				{cmd: linearTo, x: 2.5, y: 0.0},
-				{cmd: linearTo, x: 2.5, y: 1.0},
-				{cmd: linearTo, x: 1.5, y: 1.0},
-				{cmd: linearTo, x: 1.5, y: 0.0},
+				{cmd: linearTo, x: 2.5, y: 0.0, z: 1.0},
+				{cmd: linearTo, x: 2.5, y: 1.0, z: 1.0},
+				{cmd: linearTo, x: 1.5, y: 1.0, z: 1.0},
+				{cmd: linearTo, x: 1.5, y: 0.0, z: 1.0},
 
 				{cmd: rapidTo, x: 0.0, y: 0.0},
 				{cmd: linearTo, x: 1.0, y: 0.0},
@@ -562,6 +652,30 @@ Y0
 				{cmd: linearTo, x: 4.0, y: 0.0},
 			},
 		},
+		{s: `
+G21
+G55
+G10 L2 P2 X-1 Y-1 Z-1
+
+G55
+G90
+G0 X0 Y0 Z0
+G91
+G1 F1
+X1
+Y1
+X-1
+Y-1
+`,
+			actions: []action{
+				{cmd: rapidTo, x: 1.0, y: 1.0, z: 1.0},
+				{cmd: setFeed, f: 1.0},
+				{cmd: linearTo, x: 2.0, y: 1.0, z: 1.0},
+				{cmd: linearTo, x: 2.0, y: 2.0, z: 1.0},
+				{cmd: linearTo, x: 1.0, y: 2.0, z: 1.0},
+				{cmd: linearTo, x: 1.0, y: 1.0, z: 1.0},
+			},
+		},
 	}
 
 	for i, c := range cases {
@@ -629,12 +743,14 @@ Y-1
 				{cmd: linearTo, x: 1.0, y: 1.0},
 
 				{cmd: rapidTo, x: 2.0, y: 2.0},
+				{cmd: setFeed, f: 1.0},
 				{cmd: linearTo, x: 3.0, y: 2.0},
 				{cmd: linearTo, x: 3.0, y: 3.0},
 				{cmd: linearTo, x: 2.0, y: 3.0},
 				{cmd: linearTo, x: 2.0, y: 2.0},
 
 				{cmd: rapidTo, x: 0.0, y: 0.0},
+				{cmd: setFeed, f: 1.0},
 				{cmd: linearTo, x: 1.0, y: 0.0},
 				{cmd: linearTo, x: 1.0, y: 1.0},
 				{cmd: linearTo, x: 0.0, y: 1.0},
@@ -674,8 +790,7 @@ G%s
 G90
 G0 X0 Y0
 G91
-G1 F1
-X1
+G1 X1
 Y1
 X-1
 Y-1
@@ -684,8 +799,7 @@ G54
 G90
 G0 X0 Y0
 G91
-G1 F1
-X1
+G1 X1
 Y1
 X-1
 Y-1
