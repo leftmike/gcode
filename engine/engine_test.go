@@ -26,6 +26,10 @@ type machine struct {
 }
 
 func (m *machine) checkAction(act action) error {
+	if m.actions == nil {
+		return nil
+	}
+
 	if m.adx >= len(m.actions) {
 		return fmt.Errorf("test: more than %d actions: %#v", len(m.actions), act)
 	}
@@ -260,6 +264,7 @@ X1
 Y1
 X-1
 Y-1
+F2
 G92 X-2 Y0
 G90
 G0 X0 Y0
@@ -276,6 +281,8 @@ Y-1
 				{cmd: linearTo, x: 2.0, y: 2.0},
 				{cmd: linearTo, x: 1.0, y: 2.0},
 				{cmd: linearTo, x: 1.0, y: 1.0},
+				{cmd: setFeed, f: 2.0},
+
 				{cmd: rapidTo, x: 3.0, y: 1.0},
 				{cmd: linearTo, x: 4.0, y: 1.0},
 				{cmd: linearTo, x: 4.0, y: 2.0},
@@ -840,6 +847,35 @@ Y-1
 			if err != nil {
 				t.Errorf("Evaluate(%d) failed: %s", i, err)
 			}
+		}
+	}
+}
+
+func TestEvaluateFail(t *testing.T) {
+	cases := []string{
+		"G0 L0\n",
+		"G0 P0\n",
+		"G0 X1 X2\n",
+		"G0 D1\n",
+		"G0 X<name>\n",
+		`G0 X"string"
+`,
+		"G10 L2 X1\n",
+		"G10 P2 X1\n",
+		"G10 L2 P10 X1\n",
+		"G10 L200 P1 X1\n",
+		"G92\n",
+		"GG\n",
+		"G=\n",
+		"G<name>\n",
+		"G0 X0 Y0\nF1\n",
+	}
+
+	for _, c := range cases {
+		eng := engine.NewEngine(&machine{}, parser.BeagleG)
+		err := eng.Evaluate(strings.NewReader(c))
+		if err == nil {
+			t.Errorf("Evaluate(%s) did not fail", c)
 		}
 	}
 }

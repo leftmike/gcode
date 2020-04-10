@@ -162,12 +162,12 @@ func parseArgs(codes []parser.Code, allowed argSet) ([]arg, []parser.Code, error
 				return nil, nil, fmt.Errorf("arg not allowed: %s", code)
 			}
 		default:
-			break
+			return nil, nil, fmt.Errorf("arg not allowed: %s", code)
 		}
 
 		for _, arg := range args {
 			if arg.letter == code.Letter {
-				fmt.Errorf("duplicate arg specified: %s", code)
+				return nil, nil, fmt.Errorf("duplicate arg specified: %s", code)
 			}
 		}
 		num, ok := code.Value.AsNumber()
@@ -497,7 +497,7 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 				} else if num.Equal(92.0) { // G92: set work position
 					codes, err = eng.setWorkPosition(codes)
 					if err != nil {
-						return nil
+						return err
 					}
 				} else if num.Equal(92.1) { // G92.1: zero work position
 					eng.workPos = zeroPosition
