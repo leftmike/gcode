@@ -570,7 +570,8 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 					return fmt.Errorf("arg not allowed: %s", code)
 				}
 			default:
-				return fmt.Errorf("unexpected code: %s", code)
+				//				return fmt.Errorf("unexpected code: %s", code)
+				codes = codes[1:]
 			}
 		}
 	}
