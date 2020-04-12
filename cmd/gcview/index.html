@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>Name of G-code File</title>
+    <style type="text/css">
+      canvas { border: 1px solid black; }
+    </style>
+    <script src="https://unpkg.com/zdog@1/dist/zdog.dist.js"></script>
+  </head>
+  <body>
+    <canvas class="gcode-view" width="600" height="600"></canvas>
+     <script type="text/javascript">
+let illo = new Zdog.Illustration({
+  element: '.gcode-view',
+  scale: {x: 1.0, y: -1.0, z: 1.0},
+  zoom: 30,
+  rotate: {x: 1.0, y: 0, z: 0.2},
+  dragRotate: true,
+});
+
+// Workspace
+let workspace = new Zdog.Anchor({
+  addTo: illo,
+  translate: {x: -6, y: -6, z: 2},
+})
+
+new Zdog.Shape({
+  addTo: workspace,
+  stroke: 0.01,
+  color: 'grey',
+  path: [
+    {x: 0, y: 0, z: 0},
+    {x: 12, y: 0, z: 0},
+    {x: 12, y: 12, z: 0},
+    {x: 0, y: 12, z: 0},
+    {x: 0, y: 0, z: 0},
+
+    {move: {x: 0, y: 0, z: -4}},
+    {x: 12, y: 0, z: -4},
+    {x: 12, y: 12, z: -4},
+    {x: 0, y: 12, z: -4},
+    {x: 0, y: 0, z: -4},
+
+    {move: {x: 0, y: 0, z: 0}},
+    {x: 0, y: 0, z: -4},
+
+    {move: {x: 12, y: 0, z: 0}},
+    {x: 12, y: 0, z: -4},
+
+    {move: {x: 12, y: 12, z: 0}},
+    {x: 12, y: 12, z: -4},
+
+    {move: {x: 0, y: 12, z: 0}},
+    {x: 0, y: 12, z: -4},
+  ],
+})
+
+// Axes
+new Zdog.Shape({
+  addTo: workspace,
+  stroke: 0.1,
+  color: 'red',
+  path: [
+    {x: -1, y: 0, z: 0},
+    {x: 1, y: 0, z: 0},
+  ],
+})
+
+new Zdog.Shape({
+  addTo: workspace,
+  stroke: 0.1,
+  color: 'green',
+  path: [
+    {x: 0, y: -1, z: 0},
+    {x: 0, y: 1, z: 0},
+  ],
+})
+
+new Zdog.Shape({
+  addTo: workspace,
+  stroke: 0.1,
+  color: 'blue',
+  path: [
+    {x: 0, y: 0, z: -1},
+    {x: 0, y: 0, z: 1},
+  ],
+})
+
+let cx = 0, cy = 0, cz = 0
+
+function rapidTo(x, y, z) {
+  new Zdog.Shape({
+    addTo: workspace,
+    stroke: 0.02,
+    color: 'red',
+    path: [
+      {x: cx, y: cy, z: cz},
+      {x: x, y: y, z: z},
+    ],
+  })
+  cx = x
+  cy = y
+  cz = z
+}
+
+function linearTo(x, y, z) {
+  new Zdog.Shape({
+    addTo: workspace,
+    stroke: 0.02,
+    color: 'green',
+    path: [
+      {x: cx, y: cy, z: cz},
+      {x: x, y: y, z: z},
+    ],
+  })
+  cx = x
+  cy = y
+  cz = z
+}
+
+rapidTo(1.5, 0.0, 1.0)
+linearTo(2.5, 0.0, 1.0)
+linearTo(2.5, 1.0, 1.0)
+linearTo(1.5, 1.0, 1.0)
+linearTo(1.5, 0.0, 1.0)
+
+rapidTo(0.0, 0.0, 0.0)
+linearTo(1.0, 0.0, 0.0)
+linearTo(1.0, 1.0, 0.0)
+linearTo(0.0, 1.0, 0.0)
+linearTo(0.0, 0.0, 0.0)
+
+function animate() {
+  illo.updateRenderGraph()
+  requestAnimationFrame(animate)
+}
+animate();
+    </script>
+ </body>
+</html>

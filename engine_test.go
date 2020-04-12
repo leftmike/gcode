@@ -53,6 +53,18 @@ func (m *machine) LinearTo(pos gcode.Position) error {
 	return m.checkAction(action{cmd: linearTo, x: pos.X, y: pos.Y, z: pos.Z})
 }
 
+func (m *machine) HandleGCode(code gcode.Code, codes []gcode.Code,
+	setCurPos func(pos gcode.Position) error) ([]gcode.Code, error) {
+
+	return nil, fmt.Errorf("unexpected code: %s: %v", code, codes)
+}
+
+func (m *machine) HandleMCode(code gcode.Code, codes []gcode.Code,
+	setCurPos func(pos gcode.Position) error) ([]gcode.Code, error) {
+
+	return nil, fmt.Errorf("unexpected code: %s: %v", code, codes)
+}
+
 func TestEvaluate(t *testing.T) {
 	cases := []struct {
 		s       string

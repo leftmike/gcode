@@ -1,5 +1,31 @@
 package gcode
 
+/*
+To Do:
+- RepRap:
+-- parser: support {} instead of [] for expressions
+-- _ prefix for global parameter names
+
+- LinuxCNC:
+-- #1 to #30 are subroutine parameters and are local to the subroutine
+-- #<name> are local to the scope where it is assigned; scoped to subroutines
+-- #31 and above, and #<_name> are global
+-- O codes
+
+- parser: change dialect to feature flags
+- G10 L2: support R for rotation
+- predefined parameters
+
+G2, G3: arc move
+G5: cubic spline
+G5.1: quadratic spline
+G17: XY plane selection
+G18: ZX plane selection
+G19: YZ plane selection
+G53: use absolute coordinates
+M2, M30: program end
+*/
+
 import (
 	"errors"
 	"fmt"
@@ -22,6 +48,8 @@ type Machine interface {
 	SetFeed(feed float64) error
 	RapidTo(pos Position) error
 	LinearTo(pos Position) error
+	HandleGCode(code Code, codes []Code, setCurPos func(pos Position) error) ([]Code, error)
+	HandleMCode(code Code, codes []Code, setCurPos func(pos Position) error) ([]Code, error)
 }
 
 type moveMode byte
@@ -110,6 +138,11 @@ func (eng *engine) linearTo(pos Position) error {
 	if err != nil {
 		return err
 	}
+	eng.curPos = pos
+	return nil
+}
+
+func (eng *engine) setCurrentPosition(pos Position) error {
 	eng.curPos = pos
 	return nil
 }
@@ -506,20 +539,17 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 				} else if num.Equal(92.3) { // G92.3: restore saved work position
 					eng.workPos = eng.savedWorkPos
 				} else {
-					/*
-					   G2, G3: arc move
-					   G5: cubic spline
-					   G5.1: quadratic spline
-					   G17: XY plane selection
-					   G18: ZX plane selection
-					   G19: YZ plane selection
-					   G53: use absolute coordinates
-					*/
-					return fmt.Errorf("unexpected code: %s: %v", code, codes)
+					codes, err = eng.machine.HandleGCode(code, codes, eng.setCurrentPosition)
+					if err != nil {
+						return err
+					}
 				}
 			case 'M':
-				// XXX
-				codes = nil
+				codes = codes[1:]
+				codes, err = eng.machine.HandleMCode(code, codes, eng.setCurrentPosition)
+				if err != nil {
+					return err
+				}
 			case 'F':
 				if eng.moveMode == linearMove {
 					codes, err = eng.moveTo(codes)
