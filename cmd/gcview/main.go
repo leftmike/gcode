@@ -1,5 +1,14 @@
 package main
 
+/*
+To Do:
+- zoom in and out
+- track min & max positions
+- adjust workspace and default zoom based on min & max
+- console.log sizes
+- console.log rotates and zooms
+*/
+
 import (
 	"bufio"
 	"fmt"
@@ -30,7 +39,8 @@ func startBrowser(url string) {
 }
 
 type machine struct {
-	w strings.Builder
+	w    strings.Builder
+	base string
 }
 
 func (m *machine) SetFeed(feed float64) error {
@@ -53,16 +63,11 @@ func (m *machine) LinearTo(pos gcode.Position) error {
 	return nil
 }
 
-func (m *machine) HandleGCode(code gcode.Code, codes []gcode.Code,
+func (m *machine) HandleUnknown(code gcode.Code, codes []gcode.Code,
 	setCurPos func(pos gcode.Position) error) ([]gcode.Code, error) {
 
-	return nil, fmt.Errorf("unexpected code: %s: %v", code, codes)
-}
-
-func (m *machine) HandleMCode(code gcode.Code, codes []gcode.Code,
-	setCurPos func(pos gcode.Position) error) ([]gcode.Code, error) {
-
-	return nil, fmt.Errorf("unexpected code: %s: %v", code, codes)
+	fmt.Fprintf(os.Stderr, "%s: unknown: %s: %v\n", m.base, code, codes)
+	return nil, nil
 }
 
 func (m *machine) htmlOutput(base string) (string, error) {
@@ -91,7 +96,9 @@ func main() {
 		defer f.Close()
 
 		base := filepath.Base(os.Args[adx])
-		var m machine
+		m := machine{
+			base: base,
+		}
 		eng := gcode.NewEngine(&m, gcode.BeagleG)
 		err = eng.Evaluate(bufio.NewReader(f))
 		if err != nil {
@@ -106,7 +113,9 @@ func main() {
 		}
 
 		fmt.Printf("%s -> %s\n", base, out)
-		startBrowser("file://" + out)
+		if adx < 4 {
+			startBrowser("file://" + out)
+		}
 	}
 }
 

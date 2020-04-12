@@ -48,8 +48,7 @@ type Machine interface {
 	SetFeed(feed float64) error
 	RapidTo(pos Position) error
 	LinearTo(pos Position) error
-	HandleGCode(code Code, codes []Code, setCurPos func(pos Position) error) ([]Code, error)
-	HandleMCode(code Code, codes []Code, setCurPos func(pos Position) error) ([]Code, error)
+	HandleUnknown(code Code, codes []Code, setCurPos func(pos Position) error) ([]Code, error)
 }
 
 type moveMode byte
@@ -539,14 +538,14 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 				} else if num.Equal(92.3) { // G92.3: restore saved work position
 					eng.workPos = eng.savedWorkPos
 				} else {
-					codes, err = eng.machine.HandleGCode(code, codes, eng.setCurrentPosition)
+					codes, err = eng.machine.HandleUnknown(code, codes, eng.setCurrentPosition)
 					if err != nil {
 						return err
 					}
 				}
 			case 'M':
 				codes = codes[1:]
-				codes, err = eng.machine.HandleMCode(code, codes, eng.setCurrentPosition)
+				codes, err = eng.machine.HandleUnknown(code, codes, eng.setCurrentPosition)
 				if err != nil {
 					return err
 				}
@@ -570,8 +569,11 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 					return fmt.Errorf("arg not allowed: %s", code)
 				}
 			default:
-				//				return fmt.Errorf("unexpected code: %s", code)
 				codes = codes[1:]
+				codes, err = eng.machine.HandleUnknown(code, codes, eng.setCurrentPosition)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
