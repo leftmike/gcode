@@ -10,13 +10,43 @@
   </head>
   <body>
     <canvas class="gcode-view" width="600" height="600"></canvas>
-     <script type="text/javascript">
+    <script type="text/javascript">
+let cmds = [
+  {rapidTo: {x: 1.5, y: 0.0, z: 1.0}},
+  {linearTo: {x: 2.5, y: 0.0, z: 1.0}},
+  {linearTo: {x: 2.5, y: 1.0, z: 1.0}},
+  {linearTo: {x: 1.5, y: 1.0, z: 1.0}},
+  {linearTo: {x: 1.5, y: 0.0, z: 1.0}},
+
+  {rapidTo: {x: 0.0, y: 0.0, z: 0.0}},
+  {linearTo: {x: 1.0, y: 0.0, z: 0.0}},
+  {linearTo: {x: 1.0, y: 1.0, z: 0.0}},
+  {linearTo: {x: 0.0, y: 1.0, z: 0.0}},
+  {linearTo: {x: 0.0, y: 0.0, z: 0.0}},
+]
+    </script>
+    <script type="text/javascript">
+let displaySize = 600;
+
 let illo = new Zdog.Illustration({
   element: '.gcode-view',
   scale: {x: 1.0, y: -1.0, z: 1.0},
+  rotate: {x: 1.1, y: 0, z: -0.3},
   zoom: 30,
-  rotate: {x: 1.0, y: 0, z: 0.2},
-  dragRotate: true,
+});
+
+let dragStartRX, dragStartRZ;
+
+new Zdog.Dragger({
+  startElement: '.gcode-view',
+  onDragStart: function() {
+    dragStartRX = illo.rotate.x;
+    dragStartRZ = illo.rotate.z;
+  },
+  onDragMove: function( pointer, moveX, moveY ) {
+    illo.rotate.x = dragStartRX - ( moveY / displaySize * Zdog.TAU );
+    illo.rotate.z = dragStartRZ - ( moveX / displaySize * Zdog.TAU );
+  },
 });
 
 // Workspace
@@ -87,49 +117,35 @@ new Zdog.Shape({
   ],
 })
 
-let cx = 0, cy = 0, cz = 0
+let curPt = {x: 0, y: 0, z: 0}
 
-function rapidTo(x, y, z) {
+function rapidTo(pt) {
   new Zdog.Shape({
     addTo: workspace,
     stroke: 0.02,
     color: 'red',
-    path: [
-      {x: cx, y: cy, z: cz},
-      {x: x, y: y, z: z},
-    ],
+    path: [curPt, pt],
   })
-  cx = x
-  cy = y
-  cz = z
+  curPt = pt
 }
 
-function linearTo(x, y, z) {
+function linearTo(pt) {
   new Zdog.Shape({
     addTo: workspace,
     stroke: 0.02,
     color: 'green',
-    path: [
-      {x: cx, y: cy, z: cz},
-      {x: x, y: y, z: z},
-    ],
+    path: [curPt, pt],
   })
-  cx = x
-  cy = y
-  cz = z
+  curPt = pt
 }
 
-rapidTo(1.5, 0.0, 1.0)
-linearTo(2.5, 0.0, 1.0)
-linearTo(2.5, 1.0, 1.0)
-linearTo(1.5, 1.0, 1.0)
-linearTo(1.5, 0.0, 1.0)
-
-rapidTo(0.0, 0.0, 0.0)
-linearTo(1.0, 0.0, 0.0)
-linearTo(1.0, 1.0, 0.0)
-linearTo(0.0, 1.0, 0.0)
-linearTo(0.0, 0.0, 0.0)
+for (cmd of cmds) {
+  if (cmd.rapidTo !== undefined) {
+    rapidTo(cmd.rapidTo)
+  } else if (cmd.linearTo !== undefined) {
+    linearTo(cmd.linearTo)
+  }
+}
 
 function animate() {
   illo.updateRenderGraph()
