@@ -11,7 +11,12 @@
   <body>
     <canvas class="gcode-view" width="600" height="600"></canvas>
     <script type="text/javascript">
-let cmds = [
+const config = {
+  homePos: {x: 0.0, y: 0.0, z: 0.0},
+  maxPos: {x: 12.0, y: 12.0, z: -4.0},
+}
+
+const cmds = [
   {rapidTo: {x: 1.5, y: 0.0, z: 1.0}},
   {linearTo: {x: 2.5, y: 0.0, z: 1.0}},
   {linearTo: {x: 2.5, y: 1.0, z: 1.0}},
@@ -28,24 +33,44 @@ let cmds = [
     <script type="text/javascript">
 let displaySize = 600;
 
+console.log("homePos: ", config.homePos)
+console.log("maxPos: ", config.maxPos)
+
+let gcodeView = document.querySelector(".gcode-view")
+
 let illo = new Zdog.Illustration({
-  element: '.gcode-view',
+  element: gcodeView,
   scale: {x: 1.0, y: -1.0, z: 1.0},
   rotate: {x: 1.1, y: 0, z: -0.3},
   zoom: 30,
 });
 
+gcodeView.onwheel = function(event) {
+  illo.zoom += (event.deltaY * 0.1)
+  if (illo.zoom < 1.0) {
+    illo.zoom = 1.0
+  }
+  console.log("zoom: ", illo.zoom)
+  animate()
+}
+
 let dragStartRX, dragStartRZ;
+let isDragging = false;
 
 new Zdog.Dragger({
-  startElement: '.gcode-view',
+  startElement: gcodeView,
   onDragStart: function() {
     dragStartRX = illo.rotate.x;
     dragStartRZ = illo.rotate.z;
+    isDragging = true;
+    animate();
   },
   onDragMove: function( pointer, moveX, moveY ) {
     illo.rotate.x = dragStartRX - ( moveY / displaySize * Zdog.TAU );
     illo.rotate.z = dragStartRZ - ( moveX / displaySize * Zdog.TAU );
+  },
+  onDragEnd: function () {
+    isDragging = false;
   },
 });
 
@@ -149,7 +174,9 @@ for (cmd of cmds) {
 
 function animate() {
   illo.updateRenderGraph()
-  requestAnimationFrame(animate)
+  if (isDragging) {
+    requestAnimationFrame(animate)
+  }
 }
 animate();
     </script>

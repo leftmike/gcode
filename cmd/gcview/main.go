@@ -3,7 +3,6 @@ package main
 /*
 To Do:
 - zoom in and out
-- track min & max positions
 - adjust workspace and default zoom based on min & max
 - console.log sizes
 - console.log rotates and zooms
@@ -39,35 +38,74 @@ func startBrowser(url string) {
 }
 
 type machine struct {
-	w    strings.Builder
-	base string
+	w       strings.Builder
+	base    string
+	homePos gcode.Position
+	maxPos  gcode.Position
 }
 
 func (m *machine) SetFeed(feed float64) error {
 	return nil
 }
 
+func (m *machine) updateRange(pos gcode.Position) {
+	if pos.X < m.homePos.X {
+		m.homePos.X = pos.X
+	}
+	if pos.X > m.maxPos.X {
+		m.maxPos.X = pos.X
+	}
+	if pos.Y < m.homePos.Y {
+		m.homePos.Y = pos.Y
+	}
+	if pos.Y > m.maxPos.Y {
+		m.maxPos.Y = pos.Y
+	}
+	if pos.Z < m.homePos.Z {
+		m.homePos.Z = pos.Z
+	}
+	if pos.Z > m.maxPos.Z {
+		m.maxPos.Z = pos.Z
+	}
+}
+
+func floatString(f float64) string {
+	return strconv.FormatFloat(f, 'f', 6, 64)
+}
+
+func posString(pos gcode.Position) string {
+	return fmt.Sprintf("{x: %s, y: %s, z: %s}",
+		floatString(pos.X), floatString(pos.Y), floatString(pos.Z))
+}
+
 func (m *machine) RapidTo(pos gcode.Position) error {
-	fmt.Fprintf(&m.w, "  {rapidTo: {x: %s, y: %s, z: %s}},\n",
-		strconv.FormatFloat(pos.X, 'f', 6, 64),
-		strconv.FormatFloat(pos.Y, 'f', 6, 64),
-		strconv.FormatFloat(pos.Z, 'f', 6, 64))
+	m.updateRange(pos)
+	fmt.Fprintf(&m.w, "  {rapidTo: %s},\n", posString(pos))
 	return nil
 }
 
 func (m *machine) LinearTo(pos gcode.Position) error {
-	fmt.Fprintf(&m.w, "  {linearTo: {x: %s, y: %s, z: %s}},\n",
-		strconv.FormatFloat(pos.X, 'f', 6, 64),
-		strconv.FormatFloat(pos.Y, 'f', 6, 64),
-		strconv.FormatFloat(pos.Z, 'f', 6, 64))
+	m.updateRange(pos)
+	fmt.Fprintf(&m.w, "  {linearTo: %s},\n", posString(pos))
 	return nil
 }
 
 func (m *machine) HandleUnknown(code gcode.Code, codes []gcode.Code,
 	setCurPos func(pos gcode.Position) error) ([]gcode.Code, error) {
 
-	fmt.Fprintf(os.Stderr, "%s: unknown: %s: %v\n", m.base, code, codes)
+	fmt.Fprintf(os.Stderr, "%s: unknown: %v\n", m.base, append([]gcode.Code{code}, codes...))
 	return nil, nil
+}
+
+const (
+	configFormat = `
+  homePos: %s,
+  maxPos: %s,
+`
+)
+
+func (m *machine) config() string {
+	return fmt.Sprintf(configFormat, posString(m.homePos), posString(m.maxPos))
 }
 
 func (m *machine) htmlOutput(base string) (string, error) {
@@ -77,7 +115,7 @@ func (m *machine) htmlOutput(base string) (string, error) {
 	}
 	defer w.Close()
 
-	fmt.Fprintf(w, indexHTML, w.Name(), m.w.String())
+	fmt.Fprintf(w, indexHTML, w.Name(), m.config(), m.w.String())
 	return w.Name(), nil
 }
 
@@ -113,6 +151,8 @@ func main() {
 		}
 
 		fmt.Printf("%s -> %s\n", base, out)
+		fmt.Printf("%s -> %s\n", posString(m.homePos), posString(m.maxPos))
+
 		if adx < 4 {
 			startBrowser("file://" + out)
 		}
@@ -133,31 +173,55 @@ const indexHTML = `
   <body>
     <canvas class="gcode-view" width="600" height="600"></canvas>
     <script type="text/javascript">
-let cmds = [
+const config = {
+%s
+}
+
+const cmds = [
 %s
 ]
     </script>
     <script type="text/javascript">
 let displaySize = 600;
 
+console.log("homePos: ", config.homePos)
+console.log("maxPos: ", config.maxPos)
+
+let gcodeView = document.querySelector(".gcode-view")
+
 let illo = new Zdog.Illustration({
-  element: '.gcode-view',
+  element: gcodeView,
   scale: {x: 1.0, y: -1.0, z: 1.0},
   rotate: {x: 1.1, y: 0, z: -0.3},
   zoom: 30,
 });
 
+gcodeView.onwheel = function(event) {
+  illo.zoom += (event.deltaY * 0.1)
+  if (illo.zoom < 1.0) {
+    illo.zoom = 1.0
+  }
+  console.log("zoom: ", illo.zoom)
+  animate()
+}
+
 let dragStartRX, dragStartRZ;
+let isDragging = false;
 
 new Zdog.Dragger({
-  startElement: '.gcode-view',
+  startElement: gcodeView,
   onDragStart: function() {
     dragStartRX = illo.rotate.x;
     dragStartRZ = illo.rotate.z;
+    isDragging = true;
+    animate();
   },
   onDragMove: function( pointer, moveX, moveY ) {
     illo.rotate.x = dragStartRX - ( moveY / displaySize * Zdog.TAU );
     illo.rotate.z = dragStartRZ - ( moveX / displaySize * Zdog.TAU );
+  },
+  onDragEnd: function () {
+    isDragging = false;
   },
 });
 
@@ -261,7 +325,9 @@ for (cmd of cmds) {
 
 function animate() {
   illo.updateRenderGraph()
-  requestAnimationFrame(animate)
+  if (isDragging) {
+    requestAnimationFrame(animate)
+  }
 }
 animate();
     </script>
