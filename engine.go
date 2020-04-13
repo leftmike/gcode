@@ -96,7 +96,7 @@ func NewEngine(m Machine, d Dialect) *engine {
 		workPos:      zeroPosition,
 		savedWorkPos: zeroPosition,
 		moveMode:     linearMove,
-		absoluteMode: false,
+		absoluteMode: true,
 	}
 }
 
