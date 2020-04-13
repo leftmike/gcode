@@ -73,17 +73,31 @@ type Value interface {
 	AsString() (String, bool)
 }
 
-type Dialect int
+type Features uint
 
 const (
-	BeagleG Dialect = iota
-	RepRap
+	BeagleG Features = 1 << iota
 	LinuxCNC
+	RepRap
+
+	AllFeatures Features = BeagleG | LinuxCNC | RepRap
 )
 
+func (f Features) hasBeagleG() bool {
+	return f&BeagleG != 0
+}
+
+func (f Features) hasLinuxCNC() bool {
+	return f&LinuxCNC != 0
+}
+
+func (f Features) hasRepRap() bool {
+	return f&RepRap != 0
+}
+
 type Parser struct {
-	Scanner io.ByteScanner
-	Dialect Dialect
+	Scanner  io.ByteScanner
+	Features Features
 
 	// LineEndComment is called when line end comments are parsed: start with ; and %.
 	LineEndComment func(comment string) error
@@ -877,7 +891,7 @@ func (p *Parser) parseParameter() Value {
 
 		p.Scanner.UnreadByte()
 		return Number(num)
-	} else if (p.Dialect == BeagleG && nameByte(b)) || b == '<' {
+	} else if (p.Features.hasBeagleG() && nameByte(b)) || b == '<' {
 		var delim bool
 		if b == '<' {
 			delim = true
@@ -1186,7 +1200,7 @@ func (naa numAssignAction) evaluate(p *Parser, codes []Code, endFuncs []endFunc)
 		p.error("setting number parameters not supported")
 	}
 
-	if p.Dialect == LinuxCNC {
+	if p.Features.hasLinuxCNC() {
 		return codes, append(endFuncs,
 			func(p *Parser) {
 				numAssignment(p, naa.num, naa.assignOp, p.wantNumber(naa.expr.evaluate(p)))
@@ -1244,7 +1258,7 @@ func nameAssignment(p *Parser, name Name, assignOp assignOp, val Value) {
 func (naa nameAssignAction) evaluate(p *Parser, codes []Code, endFuncs []endFunc) ([]Code,
 	[]endFunc, bool) {
 
-	if p.Dialect == LinuxCNC {
+	if p.Features.hasLinuxCNC() {
 		return codes, append(endFuncs,
 			func(p *Parser) {
 				nameAssignment(p, naa.name, naa.assignOp, naa.expr.evaluate(p))
@@ -1414,7 +1428,7 @@ func (p *Parser) parse() action {
 			}
 			p.lineState = inBody
 
-			if p.Dialect == BeagleG {
+			if p.Features.hasBeagleG() {
 				switch kw {
 				case "WHILE":
 					return p.parseWhileBeagleG()

@@ -691,7 +691,7 @@ Y-1
 	}
 
 	for i, c := range cases {
-		eng := gcode.NewEngine(&machine{actions: c.actions}, gcode.BeagleG)
+		eng := gcode.NewEngine(&machine{actions: c.actions}, gcode.AllFeatures)
 		err := eng.Evaluate(strings.NewReader(c.s))
 		if err != nil {
 			t.Errorf("Evaluate(%d) failed: %s", i, err)
@@ -847,7 +847,7 @@ Y-1
 
 	for _, cs := range []string{"56", "57", "58", "59", "59.1", "59.2", "59.3"} {
 		for i, c := range cases {
-			eng := gcode.NewEngine(&machine{actions: c.actions}, gcode.BeagleG)
+			eng := gcode.NewEngine(&machine{actions: c.actions}, gcode.AllFeatures)
 			err := eng.Evaluate(strings.NewReader(fmt.Sprintf(c.s, cs)))
 			if err != nil {
 				t.Errorf("Evaluate(%d) failed: %s", i, err)
@@ -877,7 +877,7 @@ func TestEvaluateFail(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		eng := gcode.NewEngine(&machine{}, gcode.BeagleG)
+		eng := gcode.NewEngine(&machine{}, gcode.AllFeatures)
 		err := eng.Evaluate(strings.NewReader(c))
 		if err == nil {
 			t.Errorf("Evaluate(%s) did not fail", c)

@@ -12,7 +12,6 @@ To Do:
 -- #31 and above, and #<_name> are global
 -- O codes
 
-- parser: change dialect to feature flags
 - G10 L2: support R for rotation
 - predefined parameters
 
@@ -62,7 +61,7 @@ const (
 
 type engine struct {
 	machine      Machine
-	dialect      Dialect
+	features     Features
 	numParams    map[int]Number
 	units        float64 // 1.0 for mm and 25.4 for in
 	homePos      Position
@@ -77,10 +76,10 @@ type engine struct {
 	absoluteMode bool
 }
 
-func NewEngine(m Machine, d Dialect) *engine {
+func NewEngine(m Machine, f Features) *engine {
 	return &engine{
 		machine:     m,
-		dialect:     d,
+		features:    f,
 		numParams:   map[int]Number{},
 		units:       1.0, // default units is mm
 		homePos:     zeroPosition,
@@ -443,7 +442,7 @@ func (eng *engine) setWorkPosition(codes []Code) ([]Code, error) {
 func (eng *engine) Evaluate(s io.ByteScanner) error {
 	p := Parser{
 		Scanner:     s,
-		Dialect:     eng.dialect,
+		Features:    eng.features,
 		GetNumParam: eng.getNumParam,
 		SetNumParam: eng.setNumParam,
 	}

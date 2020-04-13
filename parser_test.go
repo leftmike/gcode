@@ -77,8 +77,8 @@ func TestParser(t *testing.T) {
 
 	for i, c := range cases {
 		p := Parser{
-			Scanner: strings.NewReader(c.s),
-			Dialect: BeagleG,
+			Scanner:  strings.NewReader(c.s),
+			Features: AllFeatures,
 		}
 
 		codes, err := p.Parse()
@@ -124,8 +124,8 @@ G14 X1 Y2 ; comment
 
 	for i, c := range cases {
 		p := Parser{
-			Scanner: strings.NewReader(c.s),
-			Dialect: BeagleG,
+			Scanner:  strings.NewReader(c.s),
+			Features: AllFeatures,
 		}
 
 		for _, line := range c.lines {
@@ -187,8 +187,8 @@ func TestParseParameter(t *testing.T) {
 
 	for _, c := range cases {
 		p := Parser{
-			Scanner: strings.NewReader(c.s),
-			Dialect: BeagleG,
+			Scanner:  strings.NewReader(c.s),
+			Features: AllFeatures,
 		}
 		b, err := p.Scanner.ReadByte()
 		if b != '#' {
@@ -247,8 +247,8 @@ func TestParseAssignOp(t *testing.T) {
 
 	for _, c := range cases {
 		p := Parser{
-			Scanner: strings.NewReader(c.s),
-			Dialect: BeagleG,
+			Scanner:  strings.NewReader(c.s),
+			Features: AllFeatures,
 		}
 		assignOp, err := parseAssignOp(&p)
 		if c.fail {
@@ -295,8 +295,8 @@ func TestParseNameAssignment(t *testing.T) {
 
 	for _, c := range cases {
 		p := Parser{
-			Scanner: strings.NewReader(c.s),
-			Dialect: BeagleG,
+			Scanner:  strings.NewReader(c.s),
+			Features: AllFeatures,
 		}
 		_, err := p.Parse()
 		if c.fail {
@@ -355,8 +355,8 @@ func TestParseNumAssignment(t *testing.T) {
 
 	s := "#1=1\nG10\n"
 	p := Parser{
-		Scanner: strings.NewReader(s),
-		Dialect: BeagleG,
+		Scanner:  strings.NewReader(s),
+		Features: AllFeatures,
 	}
 	_, err := p.Parse()
 	if err == nil {
@@ -365,8 +365,8 @@ func TestParseNumAssignment(t *testing.T) {
 
 	s = "G#1\n"
 	p = Parser{
-		Scanner: strings.NewReader(s),
-		Dialect: BeagleG,
+		Scanner:  strings.NewReader(s),
+		Features: AllFeatures,
 	}
 	_, err = p.Parse()
 	if err == nil {
@@ -376,8 +376,8 @@ func TestParseNumAssignment(t *testing.T) {
 	for _, c := range cases {
 		numParams := map[int]Number{}
 		p := Parser{
-			Scanner: strings.NewReader(c.s),
-			Dialect: BeagleG,
+			Scanner:  strings.NewReader(c.s),
+			Features: AllFeatures,
 			GetNumParam: func(num int) (Number, error) {
 				if num == 666 {
 					return 0, errors.New("failed")
@@ -448,8 +448,8 @@ func TestParseIfBeagleG(t *testing.T) {
 	for _, c := range cases {
 		numParams := map[int]Number{}
 		p := Parser{
-			Scanner: strings.NewReader(c.s),
-			Dialect: BeagleG,
+			Scanner:  strings.NewReader(c.s),
+			Features: AllFeatures,
 			GetNumParam: func(num int) (Number, error) {
 				return numParams[num], nil
 			},
@@ -523,8 +523,8 @@ G1
 	for _, c := range cases {
 		numParams := map[int]Number{}
 		p := Parser{
-			Scanner: strings.NewReader(c.s),
-			Dialect: BeagleG,
+			Scanner:  strings.NewReader(c.s),
+			Features: AllFeatures,
 			GetNumParam: func(num int) (Number, error) {
 				return numParams[num], nil
 			},
@@ -576,8 +576,8 @@ func TestParseComments(t *testing.T) {
 	for _, c := range cases {
 		var lineEnd, parsed, executed bool
 		p := Parser{
-			Scanner: strings.NewReader(c.s),
-			Dialect: BeagleG,
+			Scanner:  strings.NewReader(c.s),
+			Features: AllFeatures,
 			LineEndComment: func(comment string) error {
 				if comment == "fail" {
 					return errors.New("failed")
@@ -650,7 +650,7 @@ func TestParameters(t *testing.T) {
 		s     string
 		fail  bool
 		codes []Code
-		d     Dialect
+		f     Features
 	}{
 		{s: "#abc=11\nG#abc\n", codes: []Code{{'G', Number(11)}}},
 		{s: "G#abc\n", fail: true},
@@ -663,20 +663,24 @@ func TestParameters(t *testing.T) {
 
 		{s: "#abc=<def> #def=11\nG##abc\n", codes: []Code{{'G', Number(11)}}},
 
-		{s: "#abc=1\n#abc=2 G#abc\n", codes: []Code{{'G', Number(2)}}, d: BeagleG},
-		{s: "#<abc>=1\n#<abc>=2 G#<abc>\n", codes: []Code{{'G', Number(1)}}, d: LinuxCNC},
-		{s: "#1=1\n#1=2 % comment\nG#1\n", codes: []Code{{'G', Number(2)}}, d: BeagleG},
-		{s: "#1=1\n#1=2 % comment\nG#1\n", codes: []Code{{'G', Number(2)}}, d: LinuxCNC},
+		{s: "#abc=1\n#abc=2 G#abc\n", codes: []Code{{'G', Number(2)}}, f: BeagleG},
+		{s: "#<abc>=1\n#<abc>=2 G#<abc>\n", codes: []Code{{'G', Number(1)}}, f: LinuxCNC},
+		{s: "#1=1\n#1=2 % comment\nG#1\n", codes: []Code{{'G', Number(2)}}, f: BeagleG},
+		{s: "#1=1\n#1=2 % comment\nG#1\n", codes: []Code{{'G', Number(2)}}, f: LinuxCNC},
 
 		{s: "#abc=10\n*#abc ", fail: true},
 		{s: "#abc=10\nN#abc ", fail: true},
 	}
 
 	for _, c := range cases {
+		f := c.f
+		if f == 0 {
+			f = AllFeatures
+		}
 		numParams := map[int]Number{}
 		p := Parser{
-			Scanner: strings.NewReader(c.s),
-			Dialect: c.d,
+			Scanner:  strings.NewReader(c.s),
+			Features: f,
 			GetNumParam: func(num int) (Number, error) {
 				val, ok := numParams[num]
 				if !ok {
@@ -865,8 +869,8 @@ func TestExpressions(t *testing.T) {
 
 	for _, c := range cases {
 		p := Parser{
-			Scanner: strings.NewReader(c.s),
-			Dialect: BeagleG,
+			Scanner:  strings.NewReader(c.s),
+			Features: AllFeatures,
 			GetNumParam: func(num int) (Number, error) {
 				if num < 100 {
 					return Number(num) + 100, nil
@@ -940,8 +944,8 @@ func TestValues(t *testing.T) {
 
 	for _, c := range cases {
 		p := Parser{
-			Scanner: strings.NewReader(c.s),
-			Dialect: BeagleG,
+			Scanner:  strings.NewReader(c.s),
+			Features: AllFeatures,
 		}
 
 		e, err := parseExpr(&p)

@@ -6,10 +6,12 @@ To Do:
 - adjust workspace and default zoom based on min & max
 - console.log sizes
 - console.log rotates and zooms
+- derive work piece size based on non-rapid moves
 */
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -19,6 +21,12 @@ import (
 	"strings"
 
 	"github.com/leftmike/gcode"
+)
+
+var (
+	beagleGFeature  = flag.Bool("beagleg", false, "enable BeagleG dialect")
+	linuxCNCFeature = flag.Bool("linuxcnc", false, "enable LinuxCNC dialect")
+	repRapFeature   = flag.Bool("reprap", false, "enable RepRap dialect")
 )
 
 func startBrowser(url string) {
@@ -120,24 +128,40 @@ func (m *machine) htmlOutput(base string) (string, error) {
 }
 
 func main() {
-	if len(os.Args) <= 1 {
+	flag.Parse()
+	args := flag.Args()
+	var features gcode.Features
+	if *beagleGFeature {
+		features |= gcode.BeagleG
+	}
+	if *linuxCNCFeature {
+		features |= gcode.LinuxCNC
+	}
+	if *repRapFeature {
+		features |= gcode.RepRap
+	}
+	if features == 0 {
+		features = gcode.AllFeatures
+	}
+
+	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, "gcview: no gcode file(s) specified")
 		os.Exit(1)
 	}
 
-	for adx := 1; adx < len(os.Args); adx += 1 {
-		f, err := os.Open(os.Args[adx])
+	for adx, arg := range args {
+		f, err := os.Open(arg)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "gcview: %s\n", err)
 			continue
 		}
 		defer f.Close()
 
-		base := filepath.Base(os.Args[adx])
+		base := filepath.Base(arg)
 		m := machine{
 			base: base,
 		}
-		eng := gcode.NewEngine(&m, gcode.BeagleG)
+		eng := gcode.NewEngine(&m, features)
 		err = eng.Evaluate(bufio.NewReader(f))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "gcview: %s: %s\n", base, err)
