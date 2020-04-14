@@ -1,3 +1,6 @@
+package main
+
+const indexHTML = `
 <!DOCTYPE html>
 <html>
   <head>
@@ -10,28 +13,14 @@
   <body>
     <canvas class="gcode-view" width="600" height="600"></canvas>
     <script type="text/javascript">
-document.title = "<G-code Filename>" //--
-//++ document.title = "%s"
+document.title = "%s"
 
 const config = {
-  homePos: {x: 0.0, y: 0.0, z: 0.0}, //--
-  maxPos: {x: 12.0, y: 12.0, z: -4.0},
-//++ %s
+%s
 }
 
 const cmds = [
-  {rapidTo: {x: 1.5, y: 0.0, z: 1.0}}, //--
-  {linearTo: {x: 2.5, y: 0.0, z: 1.0}},
-  {linearTo: {x: 2.5, y: 1.0, z: 1.0}},
-  {linearTo: {x: 1.5, y: 1.0, z: 1.0}},
-  {linearTo: {x: 1.5, y: 0.0, z: 1.0}},
-
-  {rapidTo: {x: 0.0, y: 0.0, z: 0.0}},
-  {linearTo: {x: 1.0, y: 0.0, z: 0.0}},
-  {linearTo: {x: 1.0, y: 1.0, z: 0.0}},
-  {linearTo: {x: 0.0, y: 1.0, z: 0.0}},
-  {linearTo: {x: 0.0, y: 0.0, z: 0.0}},
-//++ %s
+%s
 ]
     </script>
     <script type="text/javascript">
@@ -186,3 +175,4 @@ animate();
     </script>
  </body>
 </html>
+`
