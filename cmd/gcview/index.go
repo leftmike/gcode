@@ -70,7 +70,11 @@ new Zdog.Dragger({
 // Workspace
 let workspace = new Zdog.Anchor({
   addTo: illo,
-  translate: {x: -6, y: -6, z: 2},
+  translate: {
+    x: (config.homePos.x - config.maxPos.x) / 2,
+    y: (config.homePos.y - config.maxPos.y) / 2,
+    z: (config.homePos.z - config.maxPos.Z) / 2,
+  },
 })
 
 new Zdog.Shape({
@@ -78,29 +82,29 @@ new Zdog.Shape({
   stroke: 0.01,
   color: 'grey',
   path: [
-    {x: 0, y: 0, z: 0},
-    {x: 12, y: 0, z: 0},
-    {x: 12, y: 12, z: 0},
-    {x: 0, y: 12, z: 0},
-    {x: 0, y: 0, z: 0},
+    {x: config.homePos.x, y: config.homePos.y, z: config.homePos.z},
+    {x: config.maxPos.x, y: config.homePos.y, z: config.homePos.z},
+    {x: config.maxPos.x, y: config.maxPos.y, z: config.homePos.z},
+    {x: config.homePos.x, y: config.maxPos.y, z: config.homePos.z},
+    {x: config.homePos.x, y: config.homePos.y, z: config.homePos.z},
 
-    {move: {x: 0, y: 0, z: -4}},
-    {x: 12, y: 0, z: -4},
-    {x: 12, y: 12, z: -4},
-    {x: 0, y: 12, z: -4},
-    {x: 0, y: 0, z: -4},
+    {move: {x: config.homePos.x, y: config.homePos.y, z: config.maxPos.z}},
+    {x: config.maxPos.x, y: config.homePos.y, z: config.maxPos.z},
+    {x: config.maxPos.x, y: config.maxPos.y, z: config.maxPos.z},
+    {x: config.homePos.x, y: config.maxPos.y, z: config.maxPos.z},
+    {x: config.homePos.x, y: config.homePos.y, z: config.maxPos.z},
 
-    {move: {x: 0, y: 0, z: 0}},
-    {x: 0, y: 0, z: -4},
+    {move: {x: config.homePos.x, y: config.homePos.y, z: config.homePos.z}},
+    {x: config.homePos.x, y: config.homePos.y, z: config.maxPos.z},
 
-    {move: {x: 12, y: 0, z: 0}},
-    {x: 12, y: 0, z: -4},
+    {move: {x: config.maxPos.x, y: config.homePos.y, z: config.homePos.z}},
+    {x: config.maxPos.x, y: config.homePos.y, z: config.maxPos.z},
 
-    {move: {x: 12, y: 12, z: 0}},
-    {x: 12, y: 12, z: -4},
+    {move: {x: config.maxPos.x, y: config.maxPos.y, z: config.homePos.z}},
+    {x: config.maxPos.x, y: config.maxPos.y, z: config.maxPos.z},
 
-    {move: {x: 0, y: 12, z: 0}},
-    {x: 0, y: 12, z: -4},
+    {move: {x: config.homePos.x, y: config.maxPos.y, z: config.homePos.z}},
+    {x: config.homePos.x, y: config.maxPos.y, z: config.maxPos.z},
   ],
 })
 
@@ -110,8 +114,8 @@ new Zdog.Shape({
   stroke: 0.1,
   color: 'red',
   path: [
-    {x: -1, y: 0, z: 0},
-    {x: 1, y: 0, z: 0},
+    {x: config.homePos.x - 1, y: config.homePos.y, z: config.homePos.z},
+    {x: config.homePos.x + 1, y: config.homePos.y, z: config.homePos.z},
   ],
 })
 
@@ -120,8 +124,8 @@ new Zdog.Shape({
   stroke: 0.1,
   color: 'green',
   path: [
-    {x: 0, y: -1, z: 0},
-    {x: 0, y: 1, z: 0},
+    {x: config.homePos.x, y: config.homePos.y - 1, z: config.homePos.z},
+    {x: config.homePos.x, y: config.homePos.y + 1, z: config.homePos.z},
   ],
 })
 
@@ -130,8 +134,8 @@ new Zdog.Shape({
   stroke: 0.1,
   color: 'blue',
   path: [
-    {x: 0, y: 0, z: -1},
-    {x: 0, y: 0, z: 1},
+    {x: config.homePos.x, y: config.homePos.y, z: config.homePos.z - 1},
+    {x: config.homePos.x, y: config.homePos.y, z: config.homePos.z + 1},
   ],
 })
 

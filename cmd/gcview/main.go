@@ -5,10 +5,11 @@ package main
 /*
 To Do:
 - zoom in and out
-- adjust workspace and default zoom based on min & max
+- adjust workspace and default zoom based on config.homePos & config.maxPos
+- make canvas the entire window and resize when the window size changes
 - console.log sizes
 - console.log rotates and zooms
-- derive work piece size based on non-rapid moves
+- change animate to update and don't use requestAnimateFrame anymore
 */
 
 import (
@@ -71,10 +72,10 @@ func (m *machine) updateRange(pos gcode.Position) {
 	if pos.Y > m.maxPos.Y {
 		m.maxPos.Y = pos.Y
 	}
-	if pos.Z < m.homePos.Z {
+	if pos.Z > m.homePos.Z {
 		m.homePos.Z = pos.Z
 	}
-	if pos.Z > m.maxPos.Z {
+	if pos.Z < m.maxPos.Z {
 		m.maxPos.Z = pos.Z
 	}
 }
@@ -89,7 +90,6 @@ func posString(pos gcode.Position) string {
 }
 
 func (m *machine) RapidTo(pos gcode.Position) error {
-	m.updateRange(pos)
 	fmt.Fprintf(&m.w, "  {rapidTo: %s},\n", posString(pos))
 	return nil
 }
@@ -115,7 +115,29 @@ const (
 )
 
 func (m *machine) config() string {
-	return fmt.Sprintf(configFormat, posString(m.homePos), posString(m.maxPos))
+	xside := m.maxPos.X - m.homePos.X
+	yside := m.maxPos.Y - m.homePos.Y
+	if xside > yside {
+		yside = xside
+	} else {
+		xside = yside
+	}
+	if xside < 12 {
+		xside = 12
+		yside = 12
+	}
+
+	zside := m.homePos.Z - m.maxPos.Z
+	if zside < 4 {
+		zside = 4
+	}
+
+	maxPos := gcode.Position{
+		X: m.homePos.Z + xside,
+		Y: m.homePos.Y + yside,
+		Z: m.homePos.Z - zside,
+	}
+	return fmt.Sprintf(configFormat, posString(m.homePos), posString(maxPos))
 }
 
 func (m *machine) htmlOutput(base string) (string, error) {
