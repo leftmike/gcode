@@ -7,12 +7,13 @@ const indexHTML = `
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <style type="text/css">
       canvas { border: 1px solid black; }
+      body { margin: 0; overflow: hidden; }
     </style>
     <script src="https://unpkg.com/zdog@1/dist/zdog.dist.js"></script>
   </head>
   <body>
-    <canvas class="gcode-view" width="600" height="600"></canvas>
-    <script type="text/javascript">
+    <canvas id="gcode-view"></canvas>
+<script type="text/javascript">
 document.title = "%s"
 
 const config = {
@@ -22,48 +23,72 @@ const config = {
 const cmds = [
 %s
 ]
-    </script>
-    <script type="text/javascript">
+
 let displaySize = 600;
 
 console.log("homePos: ", config.homePos)
 console.log("maxPos: ", config.maxPos)
 
-let gcodeView = document.querySelector(".gcode-view")
+let gcodeView = document.getElementById("gcode-view")
+gcodeView.width = window.innerWidth
+gcodeView.height = window.innerHeight
+
+let minZoom, strokeScale
+let axisLength = (config.maxPos.x - config.homePos.x) / 10
 
 let illo = new Zdog.Illustration({
   element: gcodeView,
   scale: {x: 1.0, y: -1.0, z: 1.0},
   rotate: {x: 1.1, y: 0, z: -0.3},
-  zoom: 30,
 });
+
+function setSize(width, height) {
+  diagonal = Math.sqrt(
+      (config.maxPos.x - config.homePos.x) * (config.maxPos.x - config.homePos.x) +
+      (config.maxPos.y - config.homePos.y) * (config.maxPos.y - config.homePos.y))
+  if (width < height) {
+    minZoom = width / (diagonal * 1.1)
+  } else {
+    minZoom = height / (diagonal * 1.1)
+  }
+  console.log("minZoom: ", minZoom)
+
+  strokeScale = 35 / minZoom
+  console.log("strokeScale: ", strokeScale)
+
+  if (illo.zoom < minZoom) {
+    illo.zoom = minZoom
+  }
+  illo.setSize(width, height)
+}
+
+setSize(window.innerWidth, window.innerHeight)
 
 gcodeView.onwheel = function(event) {
   illo.zoom += (event.deltaY * 0.1)
-  if (illo.zoom < 1.0) {
-    illo.zoom = 1.0
+  if (illo.zoom < minZoom) {
+    illo.zoom = minZoom
   }
-  console.log("zoom: ", illo.zoom)
-  animate()
+  update()
+}
+
+window.onresize = function() {
+  setSize(window.innerWidth, window.innerHeight)
+  update()
 }
 
 let dragStartRX, dragStartRZ;
-let isDragging = false;
 
 new Zdog.Dragger({
   startElement: gcodeView,
   onDragStart: function() {
-    dragStartRX = illo.rotate.x;
-    dragStartRZ = illo.rotate.z;
-    isDragging = true;
-    animate();
+    dragStartRX = illo.rotate.x
+    dragStartRZ = illo.rotate.z
   },
   onDragMove: function( pointer, moveX, moveY ) {
-    illo.rotate.x = dragStartRX - ( moveY / displaySize * Zdog.TAU );
-    illo.rotate.z = dragStartRZ - ( moveX / displaySize * Zdog.TAU );
-  },
-  onDragEnd: function () {
-    isDragging = false;
+    illo.rotate.x = dragStartRX - ( moveY / displaySize * Zdog.TAU )
+    illo.rotate.z = dragStartRZ - ( moveX / displaySize * Zdog.TAU )
+    update()
   },
 });
 
@@ -79,7 +104,7 @@ let workspace = new Zdog.Anchor({
 
 new Zdog.Shape({
   addTo: workspace,
-  stroke: 0.01,
+  stroke: 0.01 * strokeScale,
   color: 'grey',
   path: [
     {x: config.homePos.x, y: config.homePos.y, z: config.homePos.z},
@@ -111,31 +136,31 @@ new Zdog.Shape({
 // Axes
 new Zdog.Shape({
   addTo: workspace,
-  stroke: 0.1,
+  stroke: 0.1 * strokeScale,
   color: 'red',
   path: [
-    {x: config.homePos.x - 1, y: config.homePos.y, z: config.homePos.z},
-    {x: config.homePos.x + 1, y: config.homePos.y, z: config.homePos.z},
+    {x: config.homePos.x - axisLength, y: config.homePos.y, z: config.homePos.z},
+    {x: config.homePos.x + axisLength, y: config.homePos.y, z: config.homePos.z},
   ],
 })
 
 new Zdog.Shape({
   addTo: workspace,
-  stroke: 0.1,
+  stroke: 0.1 * strokeScale,
   color: 'green',
   path: [
-    {x: config.homePos.x, y: config.homePos.y - 1, z: config.homePos.z},
-    {x: config.homePos.x, y: config.homePos.y + 1, z: config.homePos.z},
+    {x: config.homePos.x, y: config.homePos.y - axisLength, z: config.homePos.z},
+    {x: config.homePos.x, y: config.homePos.y + axisLength, z: config.homePos.z},
   ],
 })
 
 new Zdog.Shape({
   addTo: workspace,
-  stroke: 0.1,
+  stroke: 0.1 * strokeScale,
   color: 'blue',
   path: [
-    {x: config.homePos.x, y: config.homePos.y, z: config.homePos.z - 1},
-    {x: config.homePos.x, y: config.homePos.y, z: config.homePos.z + 1},
+    {x: config.homePos.x, y: config.homePos.y, z: config.homePos.z - axisLength},
+    {x: config.homePos.x, y: config.homePos.y, z: config.homePos.z + axisLength},
   ],
 })
 
@@ -144,7 +169,7 @@ let curPt = {x: 0, y: 0, z: 0}
 function rapidTo(pt) {
   new Zdog.Shape({
     addTo: workspace,
-    stroke: 0.02,
+    stroke: 0.02 * strokeScale,
     color: 'red',
     path: [curPt, pt],
   })
@@ -154,7 +179,7 @@ function rapidTo(pt) {
 function linearTo(pt) {
   new Zdog.Shape({
     addTo: workspace,
-    stroke: 0.02,
+    stroke: 0.02 * strokeScale,
     color: 'green',
     path: [curPt, pt],
   })
@@ -169,13 +194,10 @@ for (cmd of cmds) {
   }
 }
 
-function animate() {
+function update() {
   illo.updateRenderGraph()
-  if (isDragging) {
-    requestAnimationFrame(animate)
-  }
 }
-animate();
+update()
     </script>
  </body>
 </html>

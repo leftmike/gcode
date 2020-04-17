@@ -2,16 +2,6 @@ package main
 
 //go:generate sh -c "awk -f index.awk index.html > index.go"
 
-/*
-To Do:
-- zoom in and out
-- adjust workspace and default zoom based on config.homePos & config.maxPos
-- make canvas the entire window and resize when the window size changes
-- console.log sizes
-- console.log rotates and zooms
-- change animate to update and don't use requestAnimateFrame anymore
-*/
-
 import (
 	"bufio"
 	"flag"
