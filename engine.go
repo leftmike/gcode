@@ -15,14 +15,12 @@ To Do:
 - G10 L2: support R for rotation
 - predefined parameters
 
-G2, G3: arc move
-G5: cubic spline
-G5.1: quadratic spline
-G17: XY plane selection
-G18: ZX plane selection
-G19: YZ plane selection
-G53: use absolute coordinates
-M2, M30: program end
+- G5: cubic spline
+- G5.1: quadratic spline
+- G53: use absolute coordinates
+- M2, M30: program end
+
+- document codes supported
 */
 
 import (
@@ -45,6 +43,9 @@ var (
 
 type Machine interface {
 	SetFeed(feed float64) error
+	SetSpindle(speed float64, clockwise bool) error
+	SpindleOff() error
+	SelectTool(num float64) error
 	RapidTo(pos Position) error
 	LinearTo(pos Position) error
 	HandleUnknown(code Code, codes []Code, setCurPos func(pos Position) error) ([]Code, error)
@@ -59,21 +60,34 @@ const (
 	counterClockwiseArcMove                 // G3
 )
 
+type plane byte
+
+const (
+	xyPlane plane = iota // G17
+	zxPlane              // G18
+	yzPlane              // G19
+)
+
 type engine struct {
-	machine      Machine
-	features     Features
-	numParams    map[int]Number
-	units        float64 // 1.0 for mm and 25.4 for in
-	homePos      Position
-	secondPos    Position
-	curPos       Position
-	maxPos       Position
-	curCoordSys  int
-	coordSysPos  [9]Position
-	workPos      Position
-	savedWorkPos Position
-	moveMode     moveMode
-	absoluteMode bool
+	machine          Machine
+	features         Features
+	numParams        map[int]Number
+	units            float64 // 1.0 for mm and 25.4 for in
+	homePos          Position
+	secondPos        Position
+	curPos           Position
+	maxPos           Position
+	curCoordSys      int
+	coordSysPos      [9]Position
+	workPos          Position
+	savedWorkPos     Position
+	moveMode         moveMode
+	absoluteMode     bool
+	absoluteArcMode  bool
+	plane            plane
+	spindleOn        bool
+	spindleSpeed     float64
+	spindleClockwise bool
 }
 
 func NewEngine(m Machine, f Features) *engine {
@@ -92,10 +106,15 @@ func NewEngine(m Machine, f Features) *engine {
 			zeroPosition, zeroPosition, zeroPosition,
 			zeroPosition, zeroPosition, zeroPosition,
 		},
-		workPos:      zeroPosition,
-		savedWorkPos: zeroPosition,
-		moveMode:     linearMove,
-		absoluteMode: true,
+		workPos:          zeroPosition,
+		savedWorkPos:     zeroPosition,
+		moveMode:         linearMove,
+		absoluteMode:     true,
+		absoluteArcMode:  false,
+		plane:            xyPlane,
+		spindleOn:        false,
+		spindleSpeed:     0.0,
+		spindleClockwise: true,
 	}
 }
 
@@ -114,6 +133,24 @@ func (eng *engine) setNumParam(num int, val Number) error {
 
 func (eng *engine) setFeed(feed float64) error {
 	return eng.machine.SetFeed(feed)
+}
+
+func (eng *engine) setSpindle(speed float64, clockwise bool) error {
+	return eng.machine.SetSpindle(speed, clockwise)
+}
+
+func (eng *engine) spindleOff() error {
+	return eng.machine.SpindleOff()
+}
+
+func (eng *engine) selectTool(num float64) error {
+	return eng.machine.SelectTool(num)
+}
+
+func (eng *engine) handleUnknown(code Code, codes []Code,
+	setCurPos func(pos Position) error) ([]Code, error) {
+
+	return eng.machine.HandleUnknown(code, codes, setCurPos)
 }
 
 func (eng *engine) rapidTo(pos Position) error {
@@ -154,8 +191,12 @@ type argSet int
 
 const (
 	fArg = 1 << iota
+	iArg
+	jArg
+	kArg
 	lArg
 	pArg
+	rArg
 	xArg
 	yArg
 	zArg
@@ -170,12 +211,28 @@ func parseArgs(codes []Code, allowed argSet) ([]arg, []Code, error) {
 			if (allowed & fArg) == 0 {
 				return nil, nil, fmt.Errorf("arg not allowed: %s", code)
 			}
+		case 'I':
+			if (allowed & iArg) == 0 {
+				return nil, nil, fmt.Errorf("arg not allowed: %s", code)
+			}
+		case 'J':
+			if (allowed & jArg) == 0 {
+				return nil, nil, fmt.Errorf("arg not allowed: %s", code)
+			}
+		case 'K':
+			if (allowed & kArg) == 0 {
+				return nil, nil, fmt.Errorf("arg not allowed: %s", code)
+			}
 		case 'L':
 			if (allowed & lArg) == 0 {
 				return nil, nil, fmt.Errorf("arg not allowed: %s", code)
 			}
 		case 'P':
 			if (allowed & pArg) == 0 {
+				return nil, nil, fmt.Errorf("arg not allowed: %s", code)
+			}
+		case 'R':
+			if (allowed & rArg) == 0 {
 				return nil, nil, fmt.Errorf("arg not allowed: %s", code)
 			}
 		case 'X':
@@ -191,7 +248,7 @@ func parseArgs(codes []Code, allowed argSet) ([]arg, []Code, error) {
 				return nil, nil, fmt.Errorf("arg not allowed: %s", code)
 			}
 		default:
-			return nil, nil, fmt.Errorf("arg not allowed: %s", code)
+			return args, codes, nil
 		}
 
 		for _, arg := range args {
@@ -283,6 +340,50 @@ func (eng *engine) moveTo(codes []Code) ([]Code, error) {
 	}
 
 	return codes, nil
+}
+
+func (eng *engine) arcTo(codes []Code) ([]Code, error) {
+	var err error
+	var args []arg
+	args, codes, err = parseArgs(codes, fArg|iArg|jArg|kArg|pArg|rArg|xArg|yArg|zArg)
+	if err != nil {
+		return nil, err
+	}
+
+	_ = args
+	return nil, errors.New("arcTo not implemented")
+	/*
+		pos := eng.curPos
+		for _, arg := range args {
+			switch arg.letter {
+			case 'F':
+				err = eng.setFeed(float64(arg.num) * eng.units)
+				if err != nil {
+					return nil, err
+				}
+			case 'X':
+				pos.X = eng.toMachineX(float64(arg.num)*eng.units, eng.absoluteArcMode)
+			case 'Y':
+				pos.Y = eng.toMachineY(float64(arg.num)*eng.units, eng.absoluteArcMode)
+			case 'Z':
+				pos.Z = eng.toMachineZ(float64(arg.num)*eng.units, eng.absoluteArcMode)
+			}
+		}
+
+		switch eng.moveMode {
+		case rapidMove:
+			err = eng.rapidTo(pos)
+		case linearMove:
+			err = eng.linearTo(pos)
+		default:
+			panic(fmt.Sprintf("unexpected moveMode: %d", eng.moveMode))
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		return codes, nil
+	*/
 }
 
 func (eng *engine) moveToPredefined(codes []Code, pos Position) ([]Code, error) {
@@ -478,11 +579,29 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 					if err != nil {
 						return err
 					}
+				} else if num.Equal(2.0) { // G2: clockwise arc move
+					eng.moveMode = clockwiseArcMove
+					codes, err = eng.arcTo(codes)
+					if err != nil {
+						return err
+					}
+				} else if num.Equal(3.0) { // G3: counter-clockwise arc move
+					eng.moveMode = counterClockwiseArcMove
+					codes, err = eng.arcTo(codes)
+					if err != nil {
+						return err
+					}
 				} else if num.Equal(10.0) { // G10
 					codes, err = eng.modifyPositions(codes)
 					if err != nil {
 						return err
 					}
+				} else if num.Equal(17.0) { // G17: XY plane selection
+					eng.plane = xyPlane
+				} else if num.Equal(18.0) { // G18: ZX plane selection
+					eng.plane = zxPlane
+				} else if num.Equal(19.0) { // G19: YZ plane selection
+					eng.plane = yzPlane
 				} else if num.Equal(20.0) { // G20: coordinates in inches
 					eng.units = mmPerInch
 				} else if num.Equal(21.0) { // G21: coordinates in mm
@@ -521,8 +640,12 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 					eng.curCoordSys = 8
 				} else if num.Equal(90.0) { // G90: absolute distance mode
 					eng.absoluteMode = true
+				} else if num.Equal(90.1) { // G90.1: absolute arc mode
+					eng.absoluteArcMode = true
 				} else if num.Equal(91.0) { // G91: incremental distance mode
 					eng.absoluteMode = false
+				} else if num.Equal(91.1) { // G91.1: incremental arc mode
+					eng.absoluteArcMode = false
 				} else if num.Equal(92.0) { // G92: set work position
 					codes, err = eng.setWorkPosition(codes)
 					if err != nil {
@@ -537,25 +660,83 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 				} else if num.Equal(92.3) { // G92.3: restore saved work position
 					eng.workPos = eng.savedWorkPos
 				} else {
-					codes, err = eng.machine.HandleUnknown(code, codes, eng.setCurrentPosition)
+					codes, err = eng.handleUnknown(code, codes, eng.setCurrentPosition)
 					if err != nil {
 						return err
 					}
 				}
 			case 'M':
 				codes = codes[1:]
-				codes, err = eng.machine.HandleUnknown(code, codes, eng.setCurrentPosition)
-				if err != nil {
-					return err
-				}
-			case 'F':
-				if eng.moveMode == linearMove {
-					codes, err = eng.moveTo(codes)
+
+				if num.Equal(3.0) { // M3: spindle on clockwise
+					eng.spindleOn = true
+					eng.spindleClockwise = true
+					err = eng.setSpindle(eng.spindleSpeed, eng.spindleClockwise)
+					if err != nil {
+						return err
+					}
+				} else if num.Equal(4.0) { // M4: spindle on counter-clockwise
+					eng.spindleOn = true
+					eng.spindleClockwise = false
+					err = eng.setSpindle(eng.spindleSpeed, eng.spindleClockwise)
+					if err != nil {
+						return err
+					}
+				} else if num.Equal(5.0) { // M5: spindle off
+					eng.spindleOn = false
+					err = eng.spindleOff()
 					if err != nil {
 						return err
 					}
 				} else {
+					codes, err = eng.handleUnknown(code, codes, eng.setCurrentPosition)
+					if err != nil {
+						return err
+					}
+				}
+			case 'F':
+				switch eng.moveMode {
+				case linearMove:
+					codes, err = eng.moveTo(codes)
+					if err != nil {
+						return err
+					}
+				case clockwiseArcMove, counterClockwiseArcMove:
+					codes, err = eng.arcTo(codes)
+					if err != nil {
+						return err
+					}
+				default:
 					return fmt.Errorf("arg not allowed: %s", code)
+				}
+			case 'P', 'R':
+				switch eng.moveMode {
+				case clockwiseArcMove, counterClockwiseArcMove:
+					codes, err = eng.arcTo(codes)
+					if err != nil {
+						return err
+					}
+				default:
+					return fmt.Errorf("arg not allowed: %s", code)
+				}
+			case 'S':
+				if num < 0.0 {
+					return fmt.Errorf("spindle speed must not be negative: %s", num)
+				}
+
+				codes = codes[1:]
+				eng.spindleSpeed = float64(num)
+				if eng.spindleOn {
+					err = eng.setSpindle(eng.spindleSpeed, eng.spindleClockwise)
+					if err != nil {
+						return err
+					}
+				}
+			case 'T':
+				codes = codes[1:]
+				err = eng.selectTool(float64(num))
+				if err != nil {
+					return err
 				}
 			case 'X', 'Y', 'Z':
 				switch eng.moveMode {
@@ -564,12 +745,17 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 					if err != nil {
 						return err
 					}
+				case clockwiseArcMove, counterClockwiseArcMove:
+					codes, err = eng.arcTo(codes)
+					if err != nil {
+						return err
+					}
 				default:
 					return fmt.Errorf("arg not allowed: %s", code)
 				}
 			default:
 				codes = codes[1:]
-				codes, err = eng.machine.HandleUnknown(code, codes, eng.setCurrentPosition)
+				codes, err = eng.handleUnknown(code, codes, eng.setCurrentPosition)
 				if err != nil {
 					return err
 				}

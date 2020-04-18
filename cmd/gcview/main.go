@@ -49,6 +49,18 @@ func (m *machine) SetFeed(feed float64) error {
 	return nil
 }
 
+func (m *machine) SetSpindle(speed float64, clockwise bool) error {
+	return nil
+}
+
+func (m *machine) SpindleOff() error {
+	return nil
+}
+
+func (m *machine) SelectTool(num float64) error {
+	return nil
+}
+
 func (m *machine) updateRange(pos gcode.Position) {
 	if pos.X < m.homePos.X {
 		m.homePos.X = pos.X

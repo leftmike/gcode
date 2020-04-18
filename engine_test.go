@@ -1,6 +1,7 @@
 package gcode_test
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -43,6 +44,18 @@ func (m *machine) checkAction(act action) error {
 
 func (m *machine) SetFeed(feed float64) error {
 	return m.checkAction(action{cmd: setFeed, f: feed})
+}
+
+func (m *machine) SetSpindle(speed float64, clockwise bool) error {
+	return fmt.Errorf("unexpected set spindle: %d %v", int(speed), clockwise)
+}
+
+func (m *machine) SpindleOff() error {
+	return errors.New("unexpected spindle off")
+}
+
+func (m *machine) SelectTool(num float64) error {
+	return fmt.Errorf("unexpected select tool: %d", int(num))
 }
 
 func (m *machine) RapidTo(pos gcode.Position) error {
