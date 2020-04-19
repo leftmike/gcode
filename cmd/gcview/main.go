@@ -2,6 +2,12 @@ package main
 
 //go:generate sh -c "awk -f index.awk index.html > index.go"
 
+/*
+To Do:
+- console.log the size and rendering time of the gcode
+- for gcode over a certain size, zoom and rotate the workspace, and rendering the drawing at the end
+*/
+
 import (
 	"bufio"
 	"flag"
@@ -10,7 +16,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 
 	"github.com/leftmike/gcode"
@@ -82,23 +87,14 @@ func (m *machine) updateRange(pos gcode.Position) {
 	}
 }
 
-func floatString(f float64) string {
-	return strconv.FormatFloat(f, 'f', 6, 64)
-}
-
-func posString(pos gcode.Position) string {
-	return fmt.Sprintf("{x: %s, y: %s, z: %s}",
-		floatString(pos.X), floatString(pos.Y), floatString(pos.Z))
-}
-
 func (m *machine) RapidTo(pos gcode.Position) error {
-	fmt.Fprintf(&m.w, "  {rapidTo: %s},\n", posString(pos))
+	fmt.Fprintf(&m.w, "  {rapidTo: %s},\n", pos)
 	return nil
 }
 
 func (m *machine) LinearTo(pos gcode.Position) error {
 	m.updateRange(pos)
-	fmt.Fprintf(&m.w, "  {linearTo: %s},\n", posString(pos))
+	fmt.Fprintf(&m.w, "  {linearTo: %s},\n", pos)
 	return nil
 }
 
@@ -108,13 +104,6 @@ func (m *machine) HandleUnknown(code gcode.Code, codes []gcode.Code,
 	fmt.Fprintf(os.Stderr, "%s: unknown: %v\n", m.base, append([]gcode.Code{code}, codes...))
 	return nil, nil
 }
-
-const (
-	configFormat = `
-  homePos: %s,
-  maxPos: %s,
-`
-)
 
 func (m *machine) config() string {
 	xside := m.maxPos.X - m.homePos.X
@@ -139,7 +128,10 @@ func (m *machine) config() string {
 		Y: m.homePos.Y + yside,
 		Z: m.homePos.Z - zside,
 	}
-	return fmt.Sprintf(configFormat, posString(m.homePos), posString(maxPos))
+	return fmt.Sprintf(`
+  homePos: %s,
+  maxPos: %s,
+`, m.homePos, maxPos)
 }
 
 func (m *machine) htmlOutput(base string) (string, error) {
@@ -201,7 +193,7 @@ func main() {
 		}
 
 		fmt.Printf("%s -> %s\n", base, out)
-		fmt.Printf("%s -> %s\n", posString(m.homePos), posString(m.maxPos))
+		fmt.Printf("%s -> %s\n", m.homePos, m.maxPos)
 
 		if adx < 4 {
 			startBrowser("file://" + out)

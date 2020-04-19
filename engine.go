@@ -12,6 +12,8 @@ To Do:
 -- #31 and above, and #<_name> are global
 -- O codes
 
+- check that arg to P, T are integers
+
 - G10 L2: support R for rotation
 - predefined parameters
 
@@ -37,6 +39,10 @@ type Position struct {
 	X, Y, Z float64
 }
 
+func (pos Position) String() string {
+	return fmt.Sprintf("{x: %s, y: %s, z: %s}", Number(pos.X), Number(pos.Y), Number(pos.Z))
+}
+
 var (
 	zeroPosition = Position{0.0, 0.0, 0.0}
 )
@@ -60,12 +66,12 @@ const (
 	counterClockwiseArcMove                 // G3
 )
 
-type plane byte
+type Plane byte
 
 const (
-	xyPlane plane = iota // G17
-	zxPlane              // G18
-	yzPlane              // G19
+	XYPlane Plane = iota // G17
+	ZXPlane              // G18
+	YZPlane              // G19
 )
 
 type engine struct {
@@ -84,7 +90,7 @@ type engine struct {
 	moveMode         moveMode
 	absoluteMode     bool
 	absoluteArcMode  bool
-	plane            plane
+	arcPlane         Plane
 	spindleOn        bool
 	spindleSpeed     float64
 	spindleClockwise bool
@@ -111,7 +117,7 @@ func NewEngine(m Machine, f Features) *engine {
 		moveMode:         linearMove,
 		absoluteMode:     true,
 		absoluteArcMode:  false,
-		plane:            xyPlane,
+		arcPlane:         XYPlane,
 		spindleOn:        false,
 		spindleSpeed:     0.0,
 		spindleClockwise: true,
@@ -342,50 +348,6 @@ func (eng *engine) moveTo(codes []Code) ([]Code, error) {
 	return codes, nil
 }
 
-func (eng *engine) arcTo(codes []Code) ([]Code, error) {
-	var err error
-	var args []arg
-	args, codes, err = parseArgs(codes, fArg|iArg|jArg|kArg|pArg|rArg|xArg|yArg|zArg)
-	if err != nil {
-		return nil, err
-	}
-
-	_ = args
-	return nil, errors.New("arcTo not implemented")
-	/*
-		pos := eng.curPos
-		for _, arg := range args {
-			switch arg.letter {
-			case 'F':
-				err = eng.setFeed(float64(arg.num) * eng.units)
-				if err != nil {
-					return nil, err
-				}
-			case 'X':
-				pos.X = eng.toMachineX(float64(arg.num)*eng.units, eng.absoluteArcMode)
-			case 'Y':
-				pos.Y = eng.toMachineY(float64(arg.num)*eng.units, eng.absoluteArcMode)
-			case 'Z':
-				pos.Z = eng.toMachineZ(float64(arg.num)*eng.units, eng.absoluteArcMode)
-			}
-		}
-
-		switch eng.moveMode {
-		case rapidMove:
-			err = eng.rapidTo(pos)
-		case linearMove:
-			err = eng.linearTo(pos)
-		default:
-			panic(fmt.Sprintf("unexpected moveMode: %d", eng.moveMode))
-		}
-		if err != nil {
-			return nil, err
-		}
-
-		return codes, nil
-	*/
-}
-
 func (eng *engine) moveToPredefined(codes []Code, pos Position) ([]Code, error) {
 	var err error
 	var args []arg
@@ -597,11 +559,11 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 						return err
 					}
 				} else if num.Equal(17.0) { // G17: XY plane selection
-					eng.plane = xyPlane
+					eng.arcPlane = XYPlane
 				} else if num.Equal(18.0) { // G18: ZX plane selection
-					eng.plane = zxPlane
+					eng.arcPlane = ZXPlane
 				} else if num.Equal(19.0) { // G19: YZ plane selection
-					eng.plane = yzPlane
+					eng.arcPlane = YZPlane
 				} else if num.Equal(20.0) { // G20: coordinates in inches
 					eng.units = mmPerInch
 				} else if num.Equal(21.0) { // G21: coordinates in mm
@@ -709,7 +671,7 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 				default:
 					return fmt.Errorf("arg not allowed: %s", code)
 				}
-			case 'P', 'R':
+			case 'I', 'J', 'K', 'P', 'R':
 				switch eng.moveMode {
 				case clockwiseArcMove, counterClockwiseArcMove:
 					codes, err = eng.arcTo(codes)
