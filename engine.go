@@ -12,13 +12,14 @@ To Do:
 -- #31 and above, and #<_name> are global
 -- O codes
 
+- BeagleG:
+-- document control syntax
+
 - test G2, G3
 
 - predefined parameters
 
 - M2, M30: program end
-
-- document codes supported
 */
 
 import (
