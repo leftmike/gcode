@@ -18,8 +18,6 @@ To Do:
 - test G2, G3
 
 - predefined parameters
-
-- M2, M30: program end
 */
 
 import (
@@ -119,6 +117,18 @@ func NewEngine(m Machine, f Features) *engine {
 		spindleSpeed:     0.0,
 		spindleClockwise: true,
 	}
+}
+
+func (eng *engine) endProgram() error {
+	eng.moveMode = linearMove
+	eng.curCoordSys = 0
+	eng.arcPlane = XYPlane
+	eng.absoluteMode = true
+	if eng.spindleOn {
+		eng.spindleOn = false
+		return eng.spindleOff()
+	}
+	return nil
 }
 
 func (eng *engine) getNumParam(num int) (Number, error) {
@@ -650,7 +660,9 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 			case 'M':
 				codes = codes[1:]
 
-				if num.Equal(3.0) { // M3: spindle on clockwise
+				if num.Equal(2.0) || num.Equal(30.0) { // M2, M3: end program
+					return eng.endProgram()
+				} else if num.Equal(3.0) { // M3: spindle on clockwise
 					eng.spindleOn = true
 					eng.spindleClockwise = true
 					err = eng.setSpindle(eng.spindleSpeed, eng.spindleClockwise)

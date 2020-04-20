@@ -13,7 +13,7 @@ The goal is to support multiple dialects of G-code.
 | Code | Arguments | Description |
 |--------|-----------|-------------|
 | G0 | F*n.n* X*n.n* Y*n.n* Z*n.n* | rapid move |
-| G1 | F*n.n* X*n.n* Y*n.n* Z*n.n* | linear move |
+| G1 | F*n.n* X*n.n* Y*n.n* Z*n.n* | linear move (default) |
 | G2 | F*n.n* X*n.n* Y*n.n* Z*n.n* I*n.n* J*n.n* K*n.n* | clockwise arc move with center |
 | G2 | F*n.n* X*n.n* Y*n.n* Z*n.n* R*n.n* | clockwise arc move with radius |
 | G3 | F*n.n* X*n.n* Y*n.n* Z*n.n* I*n.n* J*n.n* K*n.n* | counter-clockwise arc move with center |
@@ -48,8 +48,10 @@ The goal is to support multiple dialects of G-code.
 | G92.1 | | zero work position |
 | G92.2 | | save work position, then zero |
 | G92.3 | | restore saved work position |
+| M2 | | end program |
 | M3 | | spindle on clockwise |
 | M4 | | spindle on counter-clockwise |
 | M5 | | spindle off |
+| M30 | | end program |
 | S*n.n* | | spindle speed |
 | T*n* | | select tool |
