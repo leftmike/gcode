@@ -264,6 +264,10 @@ func (n Number) AsNumber() (Number, bool) {
 	return n, true
 }
 
+func (n Number) AsInteger() (int, bool) {
+	return int(n), n.Equal(Number(math.Trunc(float64(n))))
+}
+
 func (_ Number) AsString() (String, bool) {
 	return "", false
 }

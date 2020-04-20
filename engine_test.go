@@ -54,8 +54,8 @@ func (m *machine) SpindleOff() error {
 	return errors.New("unexpected spindle off")
 }
 
-func (m *machine) SelectTool(num float64) error {
-	return fmt.Errorf("unexpected select tool: %d", int(num))
+func (m *machine) SelectTool(tool uint) error {
+	return fmt.Errorf("unexpected select tool: %d", tool)
 }
 
 func (m *machine) RapidTo(pos gcode.Position) error {
@@ -701,6 +701,52 @@ Y-1
 				{cmd: linearTo, x: 1.0, y: 1.0, z: 1.0},
 			},
 		},
+		{s: `
+G21
+G10 L2 P1 X-1 Y-1
+G54
+G90
+G0 X0 Y0
+G91
+G1 F1
+X1
+Y1
+X-1
+Y-1
+G90
+G53 G0 X2 Y2
+G53 G1 X3 Y2
+G53
+G1 X3 Y3
+G53 G1 X2 Y3
+G53 G1 X2 Y2
+G0 X2 Y2
+G1 X3 Y2
+G1 X3 Y3
+G1 X2 Y3
+G1 X2 Y2
+`,
+			actions: []action{
+				{cmd: rapidTo, x: 1.0, y: 1.0},
+				{cmd: setFeed, f: 1.0},
+				{cmd: linearTo, x: 2.0, y: 1.0},
+				{cmd: linearTo, x: 2.0, y: 2.0},
+				{cmd: linearTo, x: 1.0, y: 2.0},
+				{cmd: linearTo, x: 1.0, y: 1.0},
+
+				{cmd: rapidTo, x: 2.0, y: 2.0},
+				{cmd: linearTo, x: 3.0, y: 2.0},
+				{cmd: linearTo, x: 3.0, y: 3.0},
+				{cmd: linearTo, x: 2.0, y: 3.0},
+				{cmd: linearTo, x: 2.0, y: 2.0},
+
+				{cmd: rapidTo, x: 3.0, y: 3.0},
+				{cmd: linearTo, x: 4.0, y: 3.0},
+				{cmd: linearTo, x: 4.0, y: 4.0},
+				{cmd: linearTo, x: 3.0, y: 4.0},
+				{cmd: linearTo, x: 3.0, y: 3.0},
+			},
+		},
 	}
 
 	for i, c := range cases {
@@ -887,6 +933,8 @@ func TestEvaluateFail(t *testing.T) {
 		"G=\n",
 		"G<name>\n",
 		"G0 X0 Y0\nF1\n",
+		"G53 G2 X1 Y1\n",
+		"G53\nG3 X1 Y1 R1\n",
 	}
 
 	for _, c := range cases {

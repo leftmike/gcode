@@ -62,7 +62,7 @@ func (m *machine) SpindleOff() error {
 	return nil
 }
 
-func (m *machine) SelectTool(num float64) error {
+func (m *machine) SelectTool(tool uint) error {
 	return nil
 }
 

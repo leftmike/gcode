@@ -150,7 +150,11 @@ func (eng *engine) fromArcPlane(pos Position) Position {
 	}
 }
 
-func (eng *engine) arcTo(codes []Code) ([]Code, error) {
+func (eng *engine) arcTo(codes []Code, useMachine bool) ([]Code, error) {
+	if useMachine {
+		return nil, errors.New("G53 not allowed with arcs")
+	}
+
 	var err error
 	var args []arg
 	args, codes, err = parseArgs(codes, fArg|iArg|jArg|kArg|pArg|rArg|xArg|yArg|zArg)
@@ -185,10 +189,11 @@ func (eng *engine) arcTo(codes []Code) ([]Code, error) {
 			}
 			centerPos.Z = eng.toMachineZ(float64(arg.num)*eng.units, eng.absoluteArcMode)
 		case 'P':
-			if arg.num < 1.0 { // XXX: test actually an integer
+			num, ok := arg.num.AsInteger()
+			if !ok || num < 1 {
 				return nil, fmt.Errorf("expected a positive number of turns: P%s", arg.num)
 			}
-			turns = uint(arg.num)
+			turns = uint(num)
 		case 'R':
 			radius = float64(arg.num)
 			if radius <= 0.0 {

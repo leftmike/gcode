@@ -12,14 +12,10 @@ To Do:
 -- #31 and above, and #<_name> are global
 -- O codes
 
-- check that arg to P, T are integers
+- test G2, G3
 
-- G10 L2: support R for rotation
 - predefined parameters
 
-- G5: cubic spline
-- G5.1: quadratic spline
-- G53: use absolute coordinates
 - M2, M30: program end
 
 - document codes supported
@@ -51,7 +47,7 @@ type Machine interface {
 	SetFeed(feed float64) error
 	SetSpindle(speed float64, clockwise bool) error
 	SpindleOff() error
-	SelectTool(num float64) error
+	SelectTool(tool uint) error
 	RapidTo(pos Position) error
 	LinearTo(pos Position) error
 	HandleUnknown(code Code, codes []Code, setCurPos func(pos Position) error) ([]Code, error)
@@ -149,8 +145,8 @@ func (eng *engine) spindleOff() error {
 	return eng.machine.SpindleOff()
 }
 
-func (eng *engine) selectTool(num float64) error {
-	return eng.machine.SelectTool(num)
+func (eng *engine) selectTool(tool uint) error {
+	return eng.machine.SelectTool(tool)
 }
 
 func (eng *engine) handleUnknown(code Code, codes []Code,
@@ -308,7 +304,7 @@ func (eng *engine) toMachineZ(z float64, absolute bool) float64 {
 	return eng.curPos.Z + z
 }
 
-func (eng *engine) moveTo(codes []Code) ([]Code, error) {
+func (eng *engine) moveTo(codes []Code, useMachine bool) ([]Code, error) {
 	var err error
 	var args []arg
 	args, codes, err = parseArgs(codes, fArg|xArg|yArg|zArg)
@@ -325,11 +321,23 @@ func (eng *engine) moveTo(codes []Code) ([]Code, error) {
 				return nil, err
 			}
 		case 'X':
-			pos.X = eng.toMachineX(float64(arg.num)*eng.units, eng.absoluteMode)
+			if useMachine {
+				pos.X = float64(arg.num) * eng.units
+			} else {
+				pos.X = eng.toMachineX(float64(arg.num)*eng.units, eng.absoluteMode)
+			}
 		case 'Y':
-			pos.Y = eng.toMachineY(float64(arg.num)*eng.units, eng.absoluteMode)
+			if useMachine {
+				pos.Y = float64(arg.num) * eng.units
+			} else {
+				pos.Y = eng.toMachineY(float64(arg.num)*eng.units, eng.absoluteMode)
+			}
 		case 'Z':
-			pos.Z = eng.toMachineZ(float64(arg.num)*eng.units, eng.absoluteMode)
+			if useMachine {
+				pos.Z = float64(arg.num) * eng.units
+			} else {
+				pos.Z = eng.toMachineZ(float64(arg.num)*eng.units, eng.absoluteMode)
+			}
 		}
 	}
 
@@ -513,11 +521,12 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 	for {
 		codes, err := p.Parse()
 		if err == io.EOF {
-			break
+			return nil
 		} else if err != nil {
 			return err
 		}
 
+		useMachine := false
 		for len(codes) > 0 {
 			code := codes[0]
 			num, ok := code.Value.AsNumber()
@@ -531,25 +540,25 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 
 				if num.Equal(0.0) { // G0: rapid move
 					eng.moveMode = rapidMove
-					codes, err = eng.moveTo(codes)
+					codes, err = eng.moveTo(codes, useMachine)
 					if err != nil {
 						return err
 					}
 				} else if num.Equal(1.0) { // G1: linear move
 					eng.moveMode = linearMove
-					codes, err = eng.moveTo(codes)
+					codes, err = eng.moveTo(codes, useMachine)
 					if err != nil {
 						return err
 					}
 				} else if num.Equal(2.0) { // G2: clockwise arc move
 					eng.moveMode = clockwiseArcMove
-					codes, err = eng.arcTo(codes)
+					codes, err = eng.arcTo(codes, useMachine)
 					if err != nil {
 						return err
 					}
 				} else if num.Equal(3.0) { // G3: counter-clockwise arc move
 					eng.moveMode = counterClockwiseArcMove
-					codes, err = eng.arcTo(codes)
+					codes, err = eng.arcTo(codes, useMachine)
 					if err != nil {
 						return err
 					}
@@ -582,6 +591,16 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 					}
 				} else if num.Equal(30.1) { // G30.1: set predefined position
 					eng.secondPos = eng.curPos
+				} else if num.Equal(53.0) { // G53: move in machine coordinates
+					useMachine = true
+					if len(codes) == 0 {
+						codes, err = p.Parse()
+						if err == io.EOF {
+							return nil
+						} else if err != nil {
+							return err
+						}
+					}
 				} else if num.Equal(54.0) { // G54: use coordinate system one
 					eng.curCoordSys = 0
 				} else if num.Equal(55.0) { // G55: use coordinate system two
@@ -659,12 +678,12 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 			case 'F':
 				switch eng.moveMode {
 				case linearMove:
-					codes, err = eng.moveTo(codes)
+					codes, err = eng.moveTo(codes, useMachine)
 					if err != nil {
 						return err
 					}
 				case clockwiseArcMove, counterClockwiseArcMove:
-					codes, err = eng.arcTo(codes)
+					codes, err = eng.arcTo(codes, useMachine)
 					if err != nil {
 						return err
 					}
@@ -674,7 +693,7 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 			case 'I', 'J', 'K', 'P', 'R':
 				switch eng.moveMode {
 				case clockwiseArcMove, counterClockwiseArcMove:
-					codes, err = eng.arcTo(codes)
+					codes, err = eng.arcTo(codes, useMachine)
 					if err != nil {
 						return err
 					}
@@ -696,19 +715,23 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 				}
 			case 'T':
 				codes = codes[1:]
-				err = eng.selectTool(float64(num))
+				tool, ok := num.AsInteger()
+				if !ok || tool < 0 {
+					return fmt.Errorf("expected a non-negative integer: T%s", num)
+				}
+				err = eng.selectTool(uint(tool))
 				if err != nil {
 					return err
 				}
 			case 'X', 'Y', 'Z':
 				switch eng.moveMode {
 				case rapidMove, linearMove:
-					codes, err = eng.moveTo(codes)
+					codes, err = eng.moveTo(codes, useMachine)
 					if err != nil {
 						return err
 					}
 				case clockwiseArcMove, counterClockwiseArcMove:
-					codes, err = eng.arcTo(codes)
+					codes, err = eng.arcTo(codes, useMachine)
 					if err != nil {
 						return err
 					}
@@ -725,5 +748,5 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 		}
 	}
 
-	return nil
+	// Never reached.
 }
