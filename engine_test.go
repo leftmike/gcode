@@ -749,6 +749,41 @@ G1 X2 Y2
 		},
 		{s: `
 G21
+G10 L2 P1 X-1 Y-1
+G54
+G90
+G0 X0 Y0
+G91
+G1 F1
+X1
+Y1
+X-1
+Y-1
+G90
+G53 G0 X2 Y2
+G91
+G53 G1 X1 Y0
+G53 G1 X0 Y1
+G53 G1 X-1 Y0
+G53 G1 X0 Y-1
+`,
+			actions: []action{
+				{cmd: rapidTo, x: 1.0, y: 1.0},
+				{cmd: setFeed, f: 1.0},
+				{cmd: linearTo, x: 2.0, y: 1.0},
+				{cmd: linearTo, x: 2.0, y: 2.0},
+				{cmd: linearTo, x: 1.0, y: 2.0},
+				{cmd: linearTo, x: 1.0, y: 1.0},
+
+				{cmd: rapidTo, x: 2.0, y: 2.0},
+				{cmd: linearTo, x: 3.0, y: 2.0},
+				{cmd: linearTo, x: 3.0, y: 3.0},
+				{cmd: linearTo, x: 2.0, y: 3.0},
+				{cmd: linearTo, x: 2.0, y: 2.0},
+			},
+		},
+		{s: `
+G21
 G90
 G0 X1 Y1
 G91

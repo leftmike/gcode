@@ -333,19 +333,31 @@ func (eng *engine) moveTo(codes []Code, useMachine bool) ([]Code, error) {
 			}
 		case 'X':
 			if useMachine {
-				pos.X = float64(arg.num) * eng.units
+				if eng.absoluteMode {
+					pos.X = float64(arg.num) * eng.units
+				} else {
+					pos.X = eng.curPos.X + float64(arg.num)*eng.units
+				}
 			} else {
 				pos.X = eng.toMachineX(float64(arg.num)*eng.units, eng.absoluteMode)
 			}
 		case 'Y':
 			if useMachine {
-				pos.Y = float64(arg.num) * eng.units
+				if eng.absoluteMode {
+					pos.Y = float64(arg.num) * eng.units
+				} else {
+					pos.Y = eng.curPos.Y + float64(arg.num)*eng.units
+				}
 			} else {
 				pos.Y = eng.toMachineY(float64(arg.num)*eng.units, eng.absoluteMode)
 			}
 		case 'Z':
 			if useMachine {
-				pos.Z = float64(arg.num) * eng.units
+				if eng.absoluteMode {
+					pos.Z = float64(arg.num) * eng.units
+				} else {
+					pos.Z = eng.curPos.Z + float64(arg.num)*eng.units
+				}
 			} else {
 				pos.Z = eng.toMachineZ(float64(arg.num)*eng.units, eng.absoluteMode)
 			}
