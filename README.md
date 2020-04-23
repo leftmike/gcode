@@ -55,3 +55,51 @@ The goal is to support multiple dialects of G-code.
 | M30 | | end program |
 | S*n.n* | | spindle speed |
 | T*n* | | select tool |
+
+## Syntax
+
+### Expression Syntax
+
+```
+<parameter> =
+      '#' <integer>
+    | '#' <name>
+<expr> =
+      <reference>
+    | '[' <sub-expr> ']'
+    | <number>
+    | <name>
+    | <string>
+<sub-expr> =
+      <number>
+    | '-' <sub-expr>
+    | '!' <sub-expr>
+    | '[' <sub-expr> ']'
+    | <sub-expr> <op> <sub-expr>
+    | <reference>
+    | <name>
+    | <string>
+    | <func> '[' [<sub-expr> [',' ...]] ']'
+<op> = '+' '-' '*' '/'
+    | '==' '!=' '<' '<=' '>' '>='
+    | '&&' '||'
+<reference> = '#'* <parameter>
+<name> = '<' <name-char>+ '>'
+<initial-name-char> = 'A' ... 'Z' | 'a' ... 'z' | '_'
+<name-char> = <initial-name-char> | '0' ... '9'
+```
+
+### LinuxCNC Specific Syntax
+
+### BeagleG Specific Syntax
+
+* IF *expression* THEN *assignment*
+* IF *expression* THEN *assignment* ELSE *assignment*
+* IF *expression* THEN *assignment* ELSEIF *assignment* ...
+* IF *expression* THEN *assignment* ELSEIF *assignment* ... ELSE *assignment*
+* WHILE *expression* DO<br>
+*line* ...<br>
+END
+
+Alphanumeric parameters may be specified with and without bracketing `<` and `>` (eg.
+`#param` or `#<param>`).
