@@ -430,6 +430,9 @@ func TestParseIfBeagleG(t *testing.T) {
 		{s: "IF G1\n", fail: true},
 		{s: "IF 0 THEN #1=1\n", fail: true},
 		{s: "IF 0 THEN #1=1 THEN\n", fail: true},
+		{s: "IF 0 THEN #1=1 ELSE 123\n", fail: true},
+		{s: "IF 0 THEN #1=1 ELSENOT\n", fail: true},
+		{s: "G0 IF 0 THEN #1=1\n", fail: true},
 
 		{s: "#1=0\nIF 1 THEN #1=1 ELSEIF 1 THEN #1=2 ELSE #1=3\nG1\n", num: 1, val: 1},
 		{s: "#1=0\nIF 0 THEN #1=1 ELSEIF 1 THEN #1=2 ELSE #1=3\nG1\n", num: 1, val: 2},
@@ -654,6 +657,7 @@ func TestParameters(t *testing.T) {
 	}{
 		{s: "#abc=11\nG#abc\n", codes: []Code{{'G', Number(11)}}},
 		{s: "G#abc\n", fail: true},
+		{s: "#\"abcd\"=123\n", fail: true},
 
 		{s: "#999=22\nG#999\n", codes: []Code{{'G', Number(22)}}},
 		{s: "G#888\n", fail: true},
@@ -662,6 +666,7 @@ func TestParameters(t *testing.T) {
 		{s: "#3=5\n#4=#[1+2]\nG#4\n", codes: []Code{{'G', Number(5)}}},
 
 		{s: "#abc=<def> #def=11\nG##abc\n", codes: []Code{{'G', Number(11)}}},
+		{s: "#abc=123\nG##abc\n", fail: true},
 
 		{s: "#abc=1\n#abc=2 G#abc\n", codes: []Code{{'G', Number(2)}}, f: BeagleG},
 		{s: "#<abc>=1\n#<abc>=2 G#<abc>\n", codes: []Code{{'G', Number(1)}}, f: LinuxCNC},
@@ -782,6 +787,8 @@ func TestExpressions(t *testing.T) {
 		{s: "[0 || #111]] ", efail: true},
 		{s: "[0 && #111]] ", num: 0},
 		{s: "[1 && #111]] ", efail: true},
+		{s: "[1 && 2] ", num: 1},
+		{s: "[1 && 0] ", num: 0},
 		{s: "[101 == #1] ", num: 1},
 		{s: "[100 == #1] ", num: 0},
 		{s: "[101 < #1] ", num: 0},
@@ -865,6 +872,9 @@ func TestExpressions(t *testing.T) {
 		{s: "[round[-12.34]] ", num: -12},
 		{s: "[round[34.56]] ", num: 35},
 		{s: "[round[-34.56]] ", num: -35},
+
+		{s: `[123+"abc"] `, efail: true},
+		{s: `[<abc>+123] `, efail: true},
 	}
 
 	for _, c := range cases {
@@ -963,5 +973,26 @@ func TestValues(t *testing.T) {
 		if !valuesEqual(v, c.v) {
 			t.Errorf("evaluate(%s) got %s, want %s", c.s, v, c.v)
 		}
+	}
+
+	num := Number(123.456)
+	if _, ok := num.AsName(); ok {
+		t.Errorf("%#v.AsName() did not fail", num)
+	}
+	if _, ok := num.AsString(); ok {
+		t.Errorf("%#v.AsString() did not fail", num)
+	}
+	if _, ok := num.AsInteger(); ok {
+		t.Errorf("%#v.AsInteger() did not fail", num)
+	}
+
+	num = Number(123.0)
+	if n, ok := num.AsInteger(); !ok || n != 123 {
+		t.Errorf("%#v.AsInteger() failed: %d", num, n)
+	}
+
+	nam := Name("abc")
+	if _, ok := nam.AsString(); ok {
+		t.Errorf("%#v.AsString() did not fail", nam)
 	}
 }

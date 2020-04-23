@@ -13,6 +13,7 @@ To Do:
 -- O codes
 
 - test G2, G3
+- G90.1 - absolute distance mode for I, J & K offsets. When G90.1 is in effect I and J both must be specified with G2/3 for the XY plane or J and K for the XZ plane or it is an error.
 
 - predefined parameters
 */

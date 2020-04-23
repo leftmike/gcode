@@ -246,7 +246,7 @@ func (c Code) String() string {
 }
 
 func (n Number) String() string {
-	return strconv.FormatFloat(float64(n), 'f', 6, 64)
+	return strconv.FormatFloat(float64(n), 'f', 4, 64)
 }
 
 func (n Number) Equal(n2 Number) bool {

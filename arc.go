@@ -195,10 +195,7 @@ func (eng *engine) arcTo(codes []Code, useMachine bool) ([]Code, error) {
 			}
 			turns = uint(num)
 		case 'R':
-			radius = float64(arg.num)
-			if radius <= 0.0 {
-				return nil, fmt.Errorf("expected a positive radius: R%s", arg.num)
-			}
+			radius = float64(arg.num) * eng.units
 		case 'X':
 			endPos.X = eng.toMachineX(float64(arg.num)*eng.units, eng.absoluteMode)
 		case 'Y':
