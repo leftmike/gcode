@@ -17,7 +17,7 @@ G21
 G17
 F1
 G0 X1 Y2
-G2 X2 Y1 R1 P2
+G2 X2 Y1 R1 P9
 `,
 			actions: []action{
 				{cmd: setFeed, f: 1.0},
@@ -579,6 +579,104 @@ G3 J1 Y2 Z1
 				{cmd: linearTo, x: 0.0000, y: 2.0000, z: 1.0000},
 			},
 		},
+		{s: `
+G21
+G17
+G0 X1 Y1
+G2 F1 X2 Y1 R1
+F1 X3 R1
+I0.5 J-1 X4
+X5 R1
+`,
+			actions: []action{
+				{cmd: rapidTo, x: 1.0000, y: 1.0000, z: 0.0000},
+				{cmd: setFeed, f: 1.0},
+				{cmd: linearTo, x: 1.0933, y: 1.0475, z: 0.0000},
+				{cmd: linearTo, x: 1.1910, y: 1.0850, z: 0.0000},
+				{cmd: linearTo, x: 1.2921, y: 1.1121, z: 0.0000},
+				{cmd: linearTo, x: 1.3955, y: 1.1285, z: 0.0000},
+				{cmd: linearTo, x: 1.5000, y: 1.1340, z: 0.0000},
+				{cmd: linearTo, x: 1.6045, y: 1.1285, z: 0.0000},
+				{cmd: linearTo, x: 1.7079, y: 1.1121, z: 0.0000},
+				{cmd: linearTo, x: 1.8090, y: 1.0850, z: 0.0000},
+				{cmd: linearTo, x: 1.9067, y: 1.0475, z: 0.0000},
+				{cmd: linearTo, x: 2.0000, y: 1.0000, z: 0.0000},
+				{cmd: setFeed, f: 1.0},
+				{cmd: linearTo, x: 2.0933, y: 1.0475, z: 0.0000},
+				{cmd: linearTo, x: 2.1910, y: 1.0850, z: 0.0000},
+				{cmd: linearTo, x: 2.2921, y: 1.1121, z: 0.0000},
+				{cmd: linearTo, x: 2.3955, y: 1.1285, z: 0.0000},
+				{cmd: linearTo, x: 2.5000, y: 1.1340, z: 0.0000},
+				{cmd: linearTo, x: 2.6045, y: 1.1285, z: 0.0000},
+				{cmd: linearTo, x: 2.7079, y: 1.1121, z: 0.0000},
+				{cmd: linearTo, x: 2.8090, y: 1.0850, z: 0.0000},
+				{cmd: linearTo, x: 2.9067, y: 1.0475, z: 0.0000},
+				{cmd: linearTo, x: 3.0000, y: 1.0000, z: 0.0000},
+				{cmd: linearTo, x: 3.0947, y: 1.0420, z: 0.0000},
+				{cmd: linearTo, x: 3.1930, y: 1.0751, z: 0.0000},
+				{cmd: linearTo, x: 3.2938, y: 1.0989, z: 0.0000},
+				{cmd: linearTo, x: 3.3965, y: 1.1132, z: 0.0000},
+				{cmd: linearTo, x: 3.5000, y: 1.1180, z: 0.0000},
+				{cmd: linearTo, x: 3.6035, y: 1.1132, z: 0.0000},
+				{cmd: linearTo, x: 3.7062, y: 1.0989, z: 0.0000},
+				{cmd: linearTo, x: 3.8070, y: 1.0751, z: 0.0000},
+				{cmd: linearTo, x: 3.9053, y: 1.0420, z: 0.0000},
+				{cmd: linearTo, x: 4.0000, y: 1.0000, z: 0.0000},
+				{cmd: linearTo, x: 4.0933, y: 1.0475, z: 0.0000},
+				{cmd: linearTo, x: 4.1910, y: 1.0850, z: 0.0000},
+				{cmd: linearTo, x: 4.2921, y: 1.1121, z: 0.0000},
+				{cmd: linearTo, x: 4.3955, y: 1.1285, z: 0.0000},
+				{cmd: linearTo, x: 4.5000, y: 1.1340, z: 0.0000},
+				{cmd: linearTo, x: 4.6045, y: 1.1285, z: 0.0000},
+				{cmd: linearTo, x: 4.7079, y: 1.1121, z: 0.0000},
+				{cmd: linearTo, x: 4.8090, y: 1.0850, z: 0.0000},
+				{cmd: linearTo, x: 4.9067, y: 1.0475, z: 0.0000},
+				{cmd: linearTo, x: 5.0000, y: 1.0000, z: 0.0000},
+			},
+		},
+		{s: `
+G21
+G17
+F1
+G0 X1 Y1
+G2 X3 Y1 R0.99999
+`,
+			actions: []action{
+				{cmd: setFeed, f: 1.0},
+				{cmd: rapidTo, x: 1.0000, y: 1.0000, z: 0.0000},
+				{cmd: linearTo, x: 1.0051, y: 1.1012, z: 0.0000},
+				{cmd: linearTo, x: 1.0205, y: 1.2013, z: 0.0000},
+				{cmd: linearTo, x: 1.0459, y: 1.2994, z: 0.0000},
+				{cmd: linearTo, x: 1.0811, y: 1.3944, z: 0.0000},
+				{cmd: linearTo, x: 1.1257, y: 1.4853, z: 0.0000},
+				{cmd: linearTo, x: 1.1792, y: 1.5713, z: 0.0000},
+				{cmd: linearTo, x: 1.2412, y: 1.6514, z: 0.0000},
+				{cmd: linearTo, x: 1.3110, y: 1.7248, z: 0.0000},
+				{cmd: linearTo, x: 1.3879, y: 1.7908, z: 0.0000},
+				{cmd: linearTo, x: 1.4710, y: 1.8486, z: 0.0000},
+				{cmd: linearTo, x: 1.5596, y: 1.8978, z: 0.0000},
+				{cmd: linearTo, x: 1.6527, y: 1.9377, z: 0.0000},
+				{cmd: linearTo, x: 1.7493, y: 1.9681, z: 0.0000},
+				{cmd: linearTo, x: 1.8486, y: 1.9885, z: 0.0000},
+				{cmd: linearTo, x: 1.9494, y: 1.9987, z: 0.0000},
+				{cmd: linearTo, x: 2.0506, y: 1.9987, z: 0.0000},
+				{cmd: linearTo, x: 2.1514, y: 1.9885, z: 0.0000},
+				{cmd: linearTo, x: 2.2507, y: 1.9681, z: 0.0000},
+				{cmd: linearTo, x: 2.3473, y: 1.9377, z: 0.0000},
+				{cmd: linearTo, x: 2.4404, y: 1.8978, z: 0.0000},
+				{cmd: linearTo, x: 2.5290, y: 1.8486, z: 0.0000},
+				{cmd: linearTo, x: 2.6121, y: 1.7908, z: 0.0000},
+				{cmd: linearTo, x: 2.6890, y: 1.7248, z: 0.0000},
+				{cmd: linearTo, x: 2.7588, y: 1.6514, z: 0.0000},
+				{cmd: linearTo, x: 2.8208, y: 1.5713, z: 0.0000},
+				{cmd: linearTo, x: 2.8743, y: 1.4853, z: 0.0000},
+				{cmd: linearTo, x: 2.9189, y: 1.3944, z: 0.0000},
+				{cmd: linearTo, x: 2.9541, y: 1.2994, z: 0.0000},
+				{cmd: linearTo, x: 2.9795, y: 1.2013, z: 0.0000},
+				{cmd: linearTo, x: 2.9949, y: 1.1012, z: 0.0000},
+				{cmd: linearTo, x: 3.0000, y: 1.0000, z: 0.0000},
+			},
+		},
 	}
 
 	for i, c := range cases {
@@ -586,6 +684,35 @@ G3 J1 Y2 Z1
 		err := eng.Evaluate(strings.NewReader(c.s))
 		if err != nil {
 			t.Errorf("Evaluate(%d) failed: %s", i, err)
+		}
+	}
+}
+
+func TestArcFail(t *testing.T) {
+	cases := []string{
+		"G0 X0 Y0\nG2 R2\n",
+		"G0 X0 Y0\nG2 R1 X2.1\n",
+		"G0 X0 Y0\nG2 I1 J2 R1\n",
+		"G0 X0 Y0\nG2 P2\n",
+		"G17\nG2 K1\n",
+		"G18\nG2 J1\n",
+		"G19\nG2 I1\n",
+		"G2 P0\n",
+		"G2 P-1\n",
+		"G2 P1.5\n",
+		"G90.1\nG17\nG2 I1\n",
+		"G90.1\nG17\nG2 J1\n",
+		"G90.1\nG18\nG2 I1\n",
+		"G90.1\nG18\nG2 K1\n",
+		"G90.1\nG19\nG2 J1\n",
+		"G90.1\nG19\nG2 K1\n",
+	}
+
+	for _, c := range cases {
+		eng := gcode.NewEngine(&machine{}, gcode.AllFeatures)
+		err := eng.Evaluate(strings.NewReader(c))
+		if err == nil {
+			t.Errorf("Evaluate(%s) did not fail", c)
 		}
 	}
 }

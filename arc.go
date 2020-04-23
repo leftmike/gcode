@@ -205,6 +205,25 @@ func (eng *engine) arcTo(codes []Code, useMachine bool) ([]Code, error) {
 		}
 	}
 
+	if radius == 0.0 && eng.absoluteArcMode {
+		switch eng.arcPlane {
+		case XYPlane:
+			if !hasArg(args, 'I') || !hasArg(args, 'J') {
+				return nil, errors.New("I and J are required for XY plane in absolute arc mode")
+			}
+		case ZXPlane:
+			if !hasArg(args, 'I') || !hasArg(args, 'K') {
+				return nil, errors.New("I and K are required for ZX plane in absolute arc mode")
+			}
+		case YZPlane:
+			if !hasArg(args, 'J') || !hasArg(args, 'K') {
+				return nil, errors.New("J and K are required for YZ plane in absolute arc mode")
+			}
+		default:
+			panic(fmt.Sprintf("unexpected arcPlane: %d", eng.arcPlane))
+		}
+	}
+
 	if eng.moveMode != clockwiseArcMove && eng.moveMode != counterClockwiseArcMove {
 		panic(fmt.Sprintf("unexpected moveMode: %d", eng.moveMode))
 	}

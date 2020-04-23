@@ -12,9 +12,6 @@ To Do:
 -- #31 and above, and #<_name> are global
 -- O codes
 
-- test G2, G3
-- G90.1 - absolute distance mode for I, J & K offsets. When G90.1 is in effect I and J both must be specified with G2/3 for the XY plane or J and K for the XZ plane or it is an error.
-
 - predefined parameters
 */
 
@@ -287,6 +284,16 @@ func requireArg(args []arg, letter Letter) (Number, error) {
 	}
 
 	return 0, fmt.Errorf("missing require arg: %c", letter)
+}
+
+func hasArg(args []arg, letter Letter) bool {
+	for _, arg := range args {
+		if arg.letter == letter {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (eng *engine) toMachineX(x float64, absolute bool) float64 {
