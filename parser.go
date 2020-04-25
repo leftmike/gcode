@@ -95,18 +95,16 @@ func (f Features) hasRepRap() bool {
 	return f&RepRap != 0
 }
 
+type Executor interface {
+	Execute() error
+}
+
 type Parser struct {
 	Scanner  io.ByteScanner
 	Features Features
 
-	// LineEndComment is called when line end comments are parsed: start with ; and %.
-	LineEndComment func(comment string) error
-
-	// InlineParsed is called when inline comments are parsed: delimited by ( and ).
-	InlineParsed func(comment string) (int, string, error)
-
-	// InlinedExecuted will be called if InlinedParsed returns non-zero or a non-empty string.
-	InlineExecuted func(i int, s string) error
+	// Comment gets called for each comment; return an Executor to Execute the comment.
+	Comment func(comment string, inline bool) (Executor, error)
 
 	// GetNumParam returns the value of a number parameter.
 	GetNumParam func(num int) (Number, error)
@@ -1275,14 +1273,13 @@ func (naa nameAssignAction) evaluate(p *Parser, codes []Code, endFuncs []endFunc
 }
 
 type commentAction struct {
-	intVal    int
-	stringVal string
+	Executor
 }
 
 func (ca commentAction) evaluate(p *Parser, codes []Code, endFuncs []endFunc) ([]Code, []endFunc,
 	bool) {
 
-	err := p.InlineExecuted(ca.intVal, ca.stringVal)
+	err := ca.Execute()
 	if err != nil {
 		p.error(err.Error())
 	}
@@ -1379,10 +1376,14 @@ func (p *Parser) parse() action {
 				bytes = append(bytes, b)
 			}
 
-			if p.LineEndComment != nil {
-				err := p.LineEndComment(string(bytes))
+			if p.Comment != nil {
+				exec, err := p.Comment(string(bytes), false)
 				if err != nil {
 					p.error(err.Error())
+				}
+				if exec != nil {
+					p.unreadByte()
+					return commentAction{exec}
 				}
 			}
 
@@ -1400,13 +1401,13 @@ func (p *Parser) parse() action {
 				bytes = append(bytes, b)
 			}
 
-			if p.InlineParsed != nil {
-				i, s, err := p.InlineParsed(string(bytes))
+			if p.Comment != nil {
+				exec, err := p.Comment(string(bytes), true)
 				if err != nil {
 					p.error(err.Error())
 				}
-				if p.InlineExecuted != nil && (i != 0 || s != "") {
-					return commentAction{intVal: i, stringVal: s}
+				if exec != nil {
+					return commentAction{exec}
 				}
 			}
 		} else if b == '*' {

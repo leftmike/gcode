@@ -11,6 +11,11 @@ To Do:
 -- #<name> are local to the scope where it is assigned; scoped to subroutines
 -- #31 and above, and #<_name> are global
 -- O codes
+-- O codes can be followed by a number or a name
+-- Subroutines can change the value of parameters above #30 and those changes will be visible to the calling code. Subroutines may also change the value of global named parameters.
+-- (MSG, ...)
+-- (DEBUG, ...)
+-- (PRINT, ...)
 
 - predefined parameters
 */

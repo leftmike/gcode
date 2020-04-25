@@ -554,65 +554,66 @@ G1
 	}
 }
 
+type executor struct {
+	fail     bool
+	executed *bool
+}
+
+func (exec executor) Execute() error {
+	*exec.executed = true
+	if exec.fail {
+		return errors.New("failed")
+	}
+	return nil
+}
+
 func TestParseComments(t *testing.T) {
 	cases := []struct {
-		s         string
-		comment   string
-		intVal    int
-		stringVal string
-		lineEnd   bool
-		parsed    bool
-		executed  bool
-		fail      bool
+		s        string
+		comment  string
+		inline   bool
+		executed bool
+		fail     bool
 	}{
-		{s: " ;abcd\nG10\n", comment: "abcd", lineEnd: true},
-		{s: "(abcd) G10\n", comment: "abcd", parsed: true},
-		{s: "(abcd) G10\n", comment: "abcd", intVal: 1, parsed: true, executed: true},
-		{s: "(abcd) G10\n", comment: "abcd", stringVal: "xyz", parsed: true, executed: true},
-		{s: "(abcd) G10\n", comment: "abcd", intVal: 1, stringVal: "xyz", parsed: true,
-			executed: true},
-		{s: " ;fail\nG10\n", fail: true},
-		{s: "(fail) G10\n", fail: true},
-		{s: "(abcd) G10\n", comment: "abcd", intVal: -1, parsed: true, fail: true},
+		{s: " ;abcd\nG10\n", comment: "abcd"},
+		{s: "(abcd) G10\n", comment: "abcd", inline: true},
+		{s: "(execute) G10\n", comment: "execute", inline: true, executed: true},
+		{s: ";execute\nG10\n", comment: "execute", executed: true},
+		{s: "(exec-fail) G10\n", comment: "exec-fail", inline: true, executed: true, fail: true},
+		{s: ";exec-fail\nG10\n", comment: "exec-fail", executed: true, fail: true},
+		{s: " ;fail\nG10\n", comment: "fail", fail: true},
+		{s: "(fail) G10\n", comment: "fail", fail: true, inline: true},
 	}
 
 	for _, c := range cases {
-		var lineEnd, parsed, executed bool
+		var executed, called bool
 		p := Parser{
 			Scanner:  strings.NewReader(c.s),
 			Features: AllFeatures,
-			LineEndComment: func(comment string) error {
-				if comment == "fail" {
-					return errors.New("failed")
-				}
+			Comment: func(comment string, inline bool) (Executor, error) {
+				called = true
+
 				if comment != c.comment {
-					t.Errorf("Parse(%s): LineEndComment: got %s want %s", c.s, comment, c.comment)
+					t.Errorf("Parse(%s): Comment: got %s want %s", c.s, comment, c.comment)
 				}
-				lineEnd = true
-				return nil
-			},
-			InlineParsed: func(comment string) (int, string, error) {
+				if inline != c.inline {
+					t.Errorf("Parse(%s): Comment: for inline got %v want %v", c.s, inline, c.inline)
+				}
+
 				if comment == "fail" {
-					return 0, "", errors.New("failed")
+					return nil, errors.New("failed")
+				} else if comment == "execute" {
+					return executor{
+						fail:     false,
+						executed: &executed,
+					}, nil
+				} else if comment == "exec-fail" {
+					return executor{
+						fail:     true,
+						executed: &executed,
+					}, nil
 				}
-				if comment != c.comment {
-					t.Errorf("Parse(%s): InlineParsed: got %s want %s", c.s, comment, c.comment)
-				}
-				parsed = true
-				return c.intVal, c.stringVal, nil
-			},
-			InlineExecuted: func(i int, s string) error {
-				if i == -1 {
-					return errors.New("failed")
-				}
-				if i != c.intVal {
-					t.Errorf("Parse(%s): InlineExecuted: got %d want %d", c.s, i, c.intVal)
-				}
-				if s != c.stringVal {
-					t.Errorf("Parse(%s): InlineParsed: got %s want %s", c.s, s, c.stringVal)
-				}
-				executed = true
-				return nil
+				return nil, nil
 			},
 		}
 
@@ -624,25 +625,14 @@ func TestParseComments(t *testing.T) {
 		} else if err != nil {
 			t.Errorf("Parse(%s) failed with %s", c.s, err)
 		}
-		if lineEnd != c.lineEnd {
-			if lineEnd {
-				t.Errorf("Parse(%s): LineEndComment should not have been called", c.s)
-			} else {
-				t.Errorf("Parse(%s): LineEndComment should have been called", c.s)
-			}
-		}
-		if parsed != c.parsed {
-			if parsed {
-				t.Errorf("Parse(%s): InlineParsed should not have been called", c.s)
-			} else {
-				t.Errorf("Parse(%s): InlineParsed should have been called", c.s)
-			}
+		if !called {
+			t.Errorf("Parse(%s): Comment should have been called", c.s)
 		}
 		if executed != c.executed {
 			if executed {
-				t.Errorf("Parse(%s): InlineExecuted should not have been called", c.s)
+				t.Errorf("Parse(%s): Execute should not have been called", c.s)
 			} else {
-				t.Errorf("Parse(%s): InlineExecuted should have been called", c.s)
+				t.Errorf("Parse(%s): Execute should have been called", c.s)
 			}
 		}
 	}
