@@ -64,16 +64,17 @@ func (eng *engine) getNumParam(num int) (Number, bool) {
 		return Number(eng.secondPos.Y / eng.units), true
 	case secondPosZParam:
 		return Number(eng.secondPos.Z / eng.units), true
-		/*
-			case workPosEnabled:
-				// XXX
-			case workPosXParam:
-				return Number(eng.workPos.X / eng.units), true
-			case workPosYParam:
-				return Number(eng.workPos.Y / eng.units), true
-			case workPosZParam:
-				return Number(eng.workPos.Z / eng.units), true
-		*/
+	case workPosEnabled:
+		if eng.useWorkPos {
+			return 1, true
+		}
+		return 0, true
+	case workPosXParam:
+		return Number(eng.workPos.X / eng.units), true
+	case workPosYParam:
+		return Number(eng.workPos.Y / eng.units), true
+	case workPosZParam:
+		return Number(eng.workPos.Z / eng.units), true
 	case curCoordSysParam:
 		return Number(eng.curCoordSys + 1), true
 	}
@@ -109,19 +110,22 @@ func (eng *engine) setNumParam(num int, val Number) error {
 	case secondPosZParam:
 		eng.secondPos.Z = float64(val) * eng.units
 		return nil
-		/*
-			case workPosEnabled:
-				// XXX
-			case workPosXParam:
-				eng.workPos.X = float64(val) * eng.units
-				return nil
-			case workPosYParam:
-				eng.workPos.Y = float64(val) * eng.units
-				return nil
-			case workPosZParam:
-				eng.workPos.Z = float64(val) * eng.units
-				return nil
-		*/
+	case workPosEnabled:
+		if val.Equal(0.0) {
+			eng.useWorkPos = false
+		} else {
+			eng.useWorkPos = true
+		}
+		return nil
+	case workPosXParam:
+		eng.workPos.X = float64(val) * eng.units
+		return nil
+	case workPosYParam:
+		eng.workPos.Y = float64(val) * eng.units
+		return nil
+	case workPosZParam:
+		eng.workPos.Z = float64(val) * eng.units
+		return nil
 	case curCoordSysParam:
 		n, ok := val.AsInteger()
 		if !ok || n < 1 || n > 9 {

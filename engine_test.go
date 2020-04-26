@@ -184,6 +184,33 @@ Y-1
 		{s: `
 G21
 G90
+;G0 X2 Y2 Z2
+;G28.1
+#5161=2
+#5162=2
+#5163=2
+G0 X4 Y4 Z0
+G28 X1 Y1
+G91
+G1 F1 X1
+Y1
+X-1
+Y-1
+`,
+			actions: []action{
+				{cmd: rapidTo, x: 4.0, y: 4.0, z: 0.0},
+				{cmd: rapidTo, x: 1.0, y: 1.0, z: 0.0},
+				{cmd: rapidTo, x: 2.0, y: 2.0, z: 0.0},
+				{cmd: setFeed, f: 1.0},
+				{cmd: linearTo, x: 3.0, y: 2.0, z: 0.0},
+				{cmd: linearTo, x: 3.0, y: 3.0, z: 0.0},
+				{cmd: linearTo, x: 2.0, y: 3.0, z: 0.0},
+				{cmd: linearTo, x: 2.0, y: 2.0, z: 0.0},
+			},
+		},
+		{s: `
+G21
+G90
 G0 X2 Y2
 G1 F1
 X4
@@ -472,6 +499,41 @@ Y0
 		{s: `
 G21
 G90
+;G92 X-1.5 Z-1.0
+#5211=-1.5
+#5213=-1.0
+#5210=1
+G0 X0 Y0 Z0
+G1 F1 X1
+Y1
+X0
+Y0
+;G92.1
+#5210=0
+G0 X0 Y0 Z0
+G1 X1
+Y1
+X0
+Y0
+`,
+			actions: []action{
+				{cmd: rapidTo, x: 1.5, y: 0.0, z: 1.0},
+				{cmd: setFeed, f: 1.0},
+				{cmd: linearTo, x: 2.5, y: 0.0, z: 1.0},
+				{cmd: linearTo, x: 2.5, y: 1.0, z: 1.0},
+				{cmd: linearTo, x: 1.5, y: 1.0, z: 1.0},
+				{cmd: linearTo, x: 1.5, y: 0.0, z: 1.0},
+
+				{cmd: rapidTo, x: 0.0, y: 0.0},
+				{cmd: linearTo, x: 1.0, y: 0.0},
+				{cmd: linearTo, x: 1.0, y: 1.0},
+				{cmd: linearTo, x: 0.0, y: 1.0},
+				{cmd: linearTo, x: 0.0, y: 0.0},
+			},
+		},
+		{s: `
+G21
+G90
 G92 X-1.5
 G0 X0 Y0
 G1 F1 X1
@@ -614,6 +676,39 @@ Y-1
 				{cmd: rapidTo, x: 4.0, y: 4.0},
 
 				{cmd: rapidTo, x: 0.0, y: 0.0},
+				{cmd: setFeed, f: 1.0},
+				{cmd: linearTo, x: 1.0, y: 0.0},
+				{cmd: linearTo, x: 1.0, y: 1.0},
+				{cmd: linearTo, x: 0.0, y: 1.0},
+				{cmd: linearTo, x: 0.0, y: 0.0},
+
+				{cmd: rapidTo, x: 4.0, y: 4.0},
+				{cmd: linearTo, x: 5.0, y: 4.0},
+				{cmd: linearTo, x: 5.0, y: 5.0},
+				{cmd: linearTo, x: 4.0, y: 5.0},
+				{cmd: linearTo, x: 4.0, y: 4.0},
+			},
+		},
+		{s: `
+G21
+G90
+;G30.1
+#5181=4
+#5182=4
+G0 X0 Y0
+G1 F1
+X1
+Y1
+X0
+Y0
+G30
+G91
+G1 X1
+Y1
+X-1
+Y-1
+`,
+			actions: []action{
 				{cmd: setFeed, f: 1.0},
 				{cmd: linearTo, x: 1.0, y: 0.0},
 				{cmd: linearTo, x: 1.0, y: 1.0},
