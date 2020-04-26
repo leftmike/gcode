@@ -14,7 +14,6 @@ To Do:
 -- Subroutines can change the value of parameters above #30 and those changes will be visible to the calling code. Subroutines may also change the value of global named parameters.
 
 - predefined parameters
--- XXX: need to handle units with parameters (get and set)
 -- 5161-5169 - "G28" Home for X, Y, Z, A, B, C, U, V & W. Persistent.
 -- 5181-5189 - "G30" Home for X, Y, Z, A, B, C, U, V & W. Persistent.
 -- 5211-5219 - "G92" offset for X, Y, Z, A, B, C, U, V & W. Persistent.

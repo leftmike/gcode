@@ -60,6 +60,8 @@ The goal is to support multiple dialects of G-code.
 
 | Parameter | Default | Persistent | Description |
 |-----------|---------|------------|-------------|
+| 5161, 5162, 5163 | 0, 0, 0 | yes | X, Y, Z for home position (G28) |
+| 5181, 5182, 5183 | 0, 0, 0 | yes | X, Y, Z for predefined position (G30) |
 | 5220 | 1 | yes | current coordinate system (G54 to G59.3) |
 | 5221, 5222, 5223 | 0, 0, 0 | yes | X, Y, Z for coordinate system 1 (G54) |
 | 5241, 5242, 5243 | 0, 0, 0 | yes | X, Y, Z for coordinate system 2 (G55) |
