@@ -1,6 +1,7 @@
 package gcode
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -156,7 +157,7 @@ func parseParameter(p *Parser) (num int, nam string, err error) {
 		}
 	}()
 
-	val := p.parseParameter()
+	val := p.parseParameter(p.Scanner)
 	if n, ok := val.(Number); ok {
 		num = int(n)
 	} else if s, ok := val.(Name); ok {
@@ -294,9 +295,18 @@ func TestParseNameAssignment(t *testing.T) {
 	}
 
 	for _, c := range cases {
+		nameParams := map[Name]Value{}
 		p := Parser{
 			Scanner:  strings.NewReader(c.s),
 			Features: AllFeatures,
+			GetNameParam: func(name Name) (Value, bool) {
+				v, ok := nameParams[name]
+				return v, ok
+			},
+			SetNameParam: func(name Name, val Value) error {
+				nameParams[name] = val
+				return nil
+			},
 		}
 		_, err := p.Parse()
 		if c.fail {
@@ -306,7 +316,7 @@ func TestParseNameAssignment(t *testing.T) {
 		} else if err != nil {
 			t.Errorf("Parse(%s) failed with %s", c.s, err)
 		} else {
-			val, ok := p.nameParams[c.name]
+			val, ok := nameParams[c.name]
 			if !ok {
 				t.Errorf("Parse(%s): name parameter %s not found", c.s, c.name)
 			} else if val != c.val {
@@ -353,7 +363,7 @@ func TestParseNumAssignment(t *testing.T) {
 		{s: "#777/=11\n", fail: true},
 	}
 
-	s := "#1=1\nG10\n"
+	s := "#100=1\nG10\n"
 	p := Parser{
 		Scanner:  strings.NewReader(s),
 		Features: AllFeatures,
@@ -363,7 +373,7 @@ func TestParseNumAssignment(t *testing.T) {
 		t.Errorf("Parse(%s) did not fail", s)
 	}
 
-	s = "G#1\n"
+	s = "G#100\n"
 	p = Parser{
 		Scanner:  strings.NewReader(s),
 		Features: AllFeatures,
@@ -375,14 +385,16 @@ func TestParseNumAssignment(t *testing.T) {
 
 	for _, c := range cases {
 		numParams := map[int]Number{}
+		numParams[999] = Number(0)
 		p := Parser{
 			Scanner:  strings.NewReader(c.s),
 			Features: AllFeatures,
-			GetNumParam: func(num int) (Number, error) {
+			GetNumParam: func(num int) (Number, bool) {
 				if num == 666 {
-					return 0, errors.New("failed")
+					return 0, false
 				}
-				return numParams[num], nil
+				n, ok := numParams[num]
+				return n, ok
 			},
 			SetNumParam: func(num int, val Number) error {
 				if num == 777 {
@@ -417,35 +429,35 @@ func TestParseIfBeagleG(t *testing.T) {
 		val  Number
 		fail bool
 	}{
-		{s: "#1=0\nIF 1 THEN #1=1\nG1\n", num: 1, val: 1},
-		{s: "#1=0\nIF 0 THEN #1=1\nG1\n", num: 1, val: 0},
-		{s: "#1=1 #2=0\nIF #1 THEN #2=1\nG1\n", num: 2, val: 1},
-		{s: "#1=0 #2=0\nIF #1 THEN #2=1\nG1\n", num: 2, val: 0},
-		{s: "#1=1\nIF #1 THEN #2=1 ELSE #2=2\nG1\n", num: 2, val: 1},
-		{s: "#1=0\nIF #1 THEN #2=1 ELSE #2=2\nG1\n", num: 2, val: 2},
+		{s: "#100=0\nIF 1 THEN #100=1\nG1\n", num: 100, val: 1},
+		{s: "#100=0\nIF 0 THEN #100=1\nG1\n", num: 100, val: 0},
+		{s: "#100=1 #200=0\nIF #100 THEN #200=1\nG1\n", num: 200, val: 1},
+		{s: "#100=0 #200=0\nIF #100 THEN #200=1\nG1\n", num: 200, val: 0},
+		{s: "#100=1\nIF #100 THEN #200=1 ELSE #200=2\nG1\n", num: 200, val: 1},
+		{s: "#100=0\nIF #100 THEN #200=1 ELSE #200=2\nG1\n", num: 200, val: 2},
 
 		{s: "IF 0\n", fail: true},
 		{s: "IF 0 THEN\n", fail: true},
 		{s: "IF 0 THEN [1 + 2]\n", fail: true},
 		{s: "IF G1\n", fail: true},
-		{s: "IF 0 THEN #1=1\n", fail: true},
-		{s: "IF 0 THEN #1=1 THEN\n", fail: true},
-		{s: "IF 0 THEN #1=1 ELSE 123\n", fail: true},
-		{s: "IF 0 THEN #1=1 ELSENOT\n", fail: true},
-		{s: "G0 IF 0 THEN #1=1\n", fail: true},
+		{s: "IF 0 THEN #100=1\n", fail: true},
+		{s: "IF 0 THEN #100=1 THEN\n", fail: true},
+		{s: "IF 0 THEN #100=1 ELSE 123\n", fail: true},
+		{s: "IF 0 THEN #100=1 ELSENOT\n", fail: true},
+		{s: "G0 IF 0 THEN #100=1\n", fail: true},
 
-		{s: "#1=0\nIF 1 THEN #1=1 ELSEIF 1 THEN #1=2 ELSE #1=3\nG1\n", num: 1, val: 1},
-		{s: "#1=0\nIF 0 THEN #1=1 ELSEIF 1 THEN #1=2 ELSE #1=3\nG1\n", num: 1, val: 2},
-		{s: "#1=0\nIF 0 THEN #1=1 ELSEIF 0 THEN #1=2 ELSE #1=3\nG1\n", num: 1, val: 3},
+		{s: "#100=0\nIF 1 THEN #100=1 ELSEIF 1 THEN #100=2 ELSE #100=3\nG1\n", num: 100, val: 1},
+		{s: "#100=0\nIF 0 THEN #100=1 ELSEIF 1 THEN #100=2 ELSE #100=3\nG1\n", num: 100, val: 2},
+		{s: "#100=0\nIF 0 THEN #100=1 ELSEIF 0 THEN #100=2 ELSE #100=3\nG1\n", num: 100, val: 3},
 
-		{s: "#1=0\nIF 1 THEN #1=1 ELSEIF 1 THEN #1=2 ELSEIF 1 THEN #1=3 ELSE #1=4\nG1\n",
-			num: 1, val: 1},
-		{s: "#1=0\nIF 0 THEN #1=1 ELSEIF 1 THEN #1=2 ELSEIF 1 THEN #1=3 ELSE #1=4\nG1\n",
-			num: 1, val: 2},
-		{s: "#1=0\nIF 0 THEN #1=1 ELSEIF 0 THEN #1=2 ELSEIF 1 THEN #1=3 ELSE #1=4\nG1\n",
-			num: 1, val: 3},
-		{s: "#1=0\nIF 0 THEN #1=1 ELSEIF 0 THEN #1=2 ELSEIF 0 THEN #1=3 ELSE #1=4\nG1\n",
-			num: 1, val: 4},
+		{s: "#100=0\nIF 1 THEN #100=1 ELSEIF 1 THEN #100=2 ELSEIF 1 THEN #100=3 ELSE #100=4\nG1\n",
+			num: 100, val: 1},
+		{s: "#100=0\nIF 0 THEN #100=1 ELSEIF 1 THEN #100=2 ELSEIF 1 THEN #100=3 ELSE #100=4\nG1\n",
+			num: 100, val: 2},
+		{s: "#100=0\nIF 0 THEN #100=1 ELSEIF 0 THEN #100=2 ELSEIF 1 THEN #100=3 ELSE #100=4\nG1\n",
+			num: 100, val: 3},
+		{s: "#100=0\nIF 0 THEN #100=1 ELSEIF 0 THEN #100=2 ELSEIF 0 THEN #100=3 ELSE #100=4\nG1\n",
+			num: 100, val: 4},
 	}
 
 	for _, c := range cases {
@@ -453,8 +465,9 @@ func TestParseIfBeagleG(t *testing.T) {
 		p := Parser{
 			Scanner:  strings.NewReader(c.s),
 			Features: AllFeatures,
-			GetNumParam: func(num int) (Number, error) {
-				return numParams[num], nil
+			GetNumParam: func(num int) (Number, bool) {
+				n, ok := numParams[num]
+				return n, ok
 			},
 			SetNumParam: func(num int, val Number) error {
 				numParams[num] = val
@@ -489,38 +502,38 @@ func TestParseWhileBeagleG(t *testing.T) {
 		{s: "END\n", fail: true},
 		{s: "WHILE 0\n", fail: true},
 		{s: "WHILE 0 DO G1\n", fail: true},
-		{s: "WHILE 0 DO\n#1=1\n", fail: true},
+		{s: "WHILE 0 DO\n#100=1\n", fail: true},
 		{s: "WHILE DO\n", fail: true},
-		{s: "WHILE 0 DO\n#1=1\nEND G1\n", fail: true},
+		{s: "WHILE 0 DO\n#100=1\nEND G1\n", fail: true},
 		{s: `
-#1=0
-WHILE [#1 < 10] DO
-    #1 += 1
+#100=0
+WHILE [#100 < 10] DO
+    #100 += 1
 END
 G1
-`, num: 1, val: 10},
+`, num: 100, val: 10},
 		{s: `
-#1=0
-#2=1
-WHILE [#1 < 4] DO
-    #1 += 1
-    #2 *= 2
+#100=0
+#200=1
+WHILE [#100 < 4] DO
+    #100 += 1
+    #200 *= 2
 END
 G1
-`, num: 2, val: 16},
+`, num: 200, val: 16},
 		{s: `
-#1=0
-#2=0
-WHILE [#2 < 10] DO
-    #3=0
-    WHILE [#3 < 10] DO
-        #1 += 1
-        #3 += 1
+#100=0
+#200=0
+WHILE [#200 < 10] DO
+    #300=0
+    WHILE [#300 < 10] DO
+        #100 += 1
+        #300 += 1
     END
-    #2 += 1
+    #200 += 1
 END
 G1
-`, num: 1, val: 100},
+`, num: 100, val: 100},
 	}
 
 	for _, c := range cases {
@@ -528,8 +541,9 @@ G1
 		p := Parser{
 			Scanner:  strings.NewReader(c.s),
 			Features: AllFeatures,
-			GetNumParam: func(num int) (Number, error) {
-				return numParams[num], nil
+			GetNumParam: func(num int) (Number, bool) {
+				n, ok := numParams[num]
+				return n, ok
 			},
 			SetNumParam: func(num int, val Number) error {
 				numParams[num] = val
@@ -559,7 +573,7 @@ type executor struct {
 	executed *bool
 }
 
-func (exec executor) Execute() error {
+func (exec executor) Execute(p *Parser) error {
 	*exec.executed = true
 	if exec.fail {
 		return errors.New("failed")
@@ -569,51 +583,71 @@ func (exec executor) Execute() error {
 
 func TestParseComments(t *testing.T) {
 	cases := []struct {
-		s        string
-		comment  string
-		inline   bool
-		executed bool
-		fail     bool
+		s    string
+		outW string
+		errW string
+		fail bool
 	}{
-		{s: " ;abcd\nG10\n", comment: "abcd"},
-		{s: "(abcd) G10\n", comment: "abcd", inline: true},
-		{s: "(execute) G10\n", comment: "execute", inline: true, executed: true},
-		{s: ";execute\nG10\n", comment: "execute", executed: true},
-		{s: "(exec-fail) G10\n", comment: "exec-fail", inline: true, executed: true, fail: true},
-		{s: ";exec-fail\nG10\n", comment: "exec-fail", executed: true, fail: true},
-		{s: " ;fail\nG10\n", comment: "fail", fail: true},
-		{s: "(fail) G10\n", comment: "fail", fail: true, inline: true},
+		{s: " ;abcd\nG10\n"},
+		{s: "(abcd) G10\n"},
+		{s: "(msg,message) G10\n", outW: "message\n"},
+		{s: "(debug,debug message) G10\n", outW: "debug message\n"},
+		{s: "(print,print message) G10\n", errW: "print message\n"},
+		{s: "G10 ;msg,message\nG10\n", outW: "message\n"},
+		{s: "G10 ;debug,debug message\nG10\n", outW: "debug message\n"},
+		{s: "G10 ;print,print message\nG10\n", errW: "print message\n"},
+		{
+			s: `
+#123=456
+#456=321
+#<abc>=789
+#<def>="a string"
+#<ghi>=<name>
+(msg,#123 #<abc>)
+(debug,#123 #<abc>)
+(print,#123 #<abc>)
+(debug,#<def> #<ghi> #456)
+G10
+`,
+			outW: `#123 #<abc>
+456.0000 789.0000
+a string <name> 321.0000
+`,
+			errW: "456.0000 789.0000\n",
+		},
+		{s: "(debug,#<abc>) G10\n", fail: true},
+		{s: "(debug,# ) G10\n", fail: true},
+		{s: "(debug, #) G10\n", fail: true},
+		{s: "(debug, #<abc) G10\n", fail: true},
+		{s: "(debug, #1234567890) G10\n", fail: true},
 	}
 
 	for _, c := range cases {
-		var executed, called bool
+		var outW bytes.Buffer
+		var errW bytes.Buffer
+		numParams := map[int]Number{}
+		nameParams := map[Name]Value{}
+
 		p := Parser{
 			Scanner:  strings.NewReader(c.s),
 			Features: AllFeatures,
-			Comment: func(comment string, inline bool) (Executor, error) {
-				called = true
-
-				if comment != c.comment {
-					t.Errorf("Parse(%s): Comment: got %s want %s", c.s, comment, c.comment)
-				}
-				if inline != c.inline {
-					t.Errorf("Parse(%s): Comment: for inline got %v want %v", c.s, inline, c.inline)
-				}
-
-				if comment == "fail" {
-					return nil, errors.New("failed")
-				} else if comment == "execute" {
-					return executor{
-						fail:     false,
-						executed: &executed,
-					}, nil
-				} else if comment == "exec-fail" {
-					return executor{
-						fail:     true,
-						executed: &executed,
-					}, nil
-				}
-				return nil, nil
+			OutW:     &outW,
+			ErrW:     &errW,
+			GetNumParam: func(num int) (Number, bool) {
+				n, ok := numParams[num]
+				return n, ok
+			},
+			SetNumParam: func(num int, val Number) error {
+				numParams[num] = val
+				return nil
+			},
+			GetNameParam: func(name Name) (Value, bool) {
+				v, ok := nameParams[name]
+				return v, ok
+			},
+			SetNameParam: func(name Name, val Value) error {
+				nameParams[name] = val
+				return nil
 			},
 		}
 
@@ -622,18 +656,18 @@ func TestParseComments(t *testing.T) {
 			if err == nil {
 				t.Errorf("Parse(%s) did not fail", c.s)
 			}
+			continue
 		} else if err != nil {
 			t.Errorf("Parse(%s) failed with %s", c.s, err)
 		}
-		if !called {
-			t.Errorf("Parse(%s): Comment should have been called", c.s)
+
+		o := outW.String()
+		if o != c.outW {
+			t.Errorf("Parse(%s) outW: got %s want %s", c.s, o, c.outW)
 		}
-		if executed != c.executed {
-			if executed {
-				t.Errorf("Parse(%s): Execute should not have been called", c.s)
-			} else {
-				t.Errorf("Parse(%s): Execute should have been called", c.s)
-			}
+		e := errW.String()
+		if e != c.errW {
+			t.Errorf("Parse(%s) errW: got %s want %s", c.s, e, c.errW)
 		}
 	}
 }
@@ -665,6 +699,10 @@ func TestParameters(t *testing.T) {
 
 		{s: "#abc=10\n*#abc ", fail: true},
 		{s: "#abc=10\nN#abc ", fail: true},
+
+		{s: "#123456789=0\n", fail: true},
+		{s: "#1=-1 \nG##1\n", fail: true},
+		{s: "#1=2.1 #2=0\nG##1\n", fail: true},
 	}
 
 	for _, c := range cases {
@@ -673,18 +711,24 @@ func TestParameters(t *testing.T) {
 			f = AllFeatures
 		}
 		numParams := map[int]Number{}
+		nameParams := map[Name]Value{}
 		p := Parser{
 			Scanner:  strings.NewReader(c.s),
 			Features: f,
-			GetNumParam: func(num int) (Number, error) {
-				val, ok := numParams[num]
-				if !ok {
-					return 0, errors.New("not found")
-				}
-				return val, nil
+			GetNumParam: func(num int) (Number, bool) {
+				n, ok := numParams[num]
+				return n, ok
 			},
 			SetNumParam: func(num int, val Number) error {
 				numParams[num] = val
+				return nil
+			},
+			GetNameParam: func(name Name) (Value, bool) {
+				v, ok := nameParams[name]
+				return v, ok
+			},
+			SetNameParam: func(name Name, val Value) error {
+				nameParams[name] = val
 				return nil
 			},
 		}
@@ -868,21 +912,29 @@ func TestExpressions(t *testing.T) {
 	}
 
 	for _, c := range cases {
+		nameParams := map[Name]Value{}
+		nameParams["test"] = Number(10)
 		p := Parser{
 			Scanner:  strings.NewReader(c.s),
 			Features: AllFeatures,
-			GetNumParam: func(num int) (Number, error) {
+			GetNumParam: func(num int) (Number, bool) {
 				if num < 100 {
-					return Number(num) + 100, nil
+					return Number(num) + 100, true
 				}
-				return 0, errors.New("not found")
+				return 0, false
 			},
 			SetNumParam: func(num int, val Number) error {
 				return errors.New("should not be called")
 			},
+			GetNameParam: func(name Name) (Value, bool) {
+				v, ok := nameParams[name]
+				return v, ok
+			},
+			SetNameParam: func(name Name, val Value) error {
+				nameParams[name] = val
+				return nil
+			},
 		}
-		p.nameParams = map[Name]Value{}
-		p.nameParams["test"] = Number(10)
 
 		e, err := parseExpr(&p)
 		if c.pfail {

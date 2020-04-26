@@ -4,7 +4,6 @@ package gcode
 To Do:
 - RepRap:
 -- parser: support {} instead of [] for expressions
--- _ prefix for global parameter names
 
 - LinuxCNC:
 -- #1 to #30 are subroutine parameters and are local to the subroutine
@@ -13,9 +12,6 @@ To Do:
 -- O codes
 -- O codes can be followed by a number or a name
 -- Subroutines can change the value of parameters above #30 and those changes will be visible to the calling code. Subroutines may also change the value of global named parameters.
--- (MSG, ...)
--- (DEBUG, ...)
--- (PRINT, ...)
 
 - predefined parameters
 */
@@ -72,7 +68,10 @@ const (
 type engine struct {
 	machine          Machine
 	features         Features
+	outW             io.Writer
+	errW             io.Writer
 	numParams        map[int]Number
+	nameParams       map[Name]Value
 	units            float64 // 1.0 for mm and 25.4 for in
 	homePos          Position
 	secondPos        Position
@@ -91,11 +90,14 @@ type engine struct {
 	spindleClockwise bool
 }
 
-func NewEngine(m Machine, f Features) *engine {
+func NewEngine(m Machine, f Features, outW, errW io.Writer) *engine {
 	return &engine{
 		machine:     m,
 		features:    f,
+		outW:        outW,
+		errW:        errW,
 		numParams:   map[int]Number{},
+		nameParams:  map[Name]Value{},
 		units:       1.0, // default units is mm
 		homePos:     zeroPosition,
 		secondPos:   zeroPosition,
@@ -131,16 +133,29 @@ func (eng *engine) endProgram() error {
 	return nil
 }
 
-func (eng *engine) getNumParam(num int) (Number, error) {
+func (eng *engine) getNumParam(num int) (Number, bool) {
 	val, ok := eng.numParams[num]
 	if !ok {
-		return 0, fmt.Errorf("engine: number parameter %d not found", num)
+		return 0, false
 	}
-	return val, nil
+	return val, true
 }
 
 func (eng *engine) setNumParam(num int, val Number) error {
 	eng.numParams[num] = val
+	return nil
+}
+
+func (eng *engine) getNameParam(name Name) (Value, bool) {
+	val, ok := eng.nameParams[name]
+	if !ok {
+		return nil, false
+	}
+	return val, true
+}
+
+func (eng *engine) setNameParam(name Name, val Value) error {
+	eng.nameParams[name] = val
 	return nil
 }
 
@@ -545,10 +560,14 @@ func (eng *engine) setWorkPosition(codes []Code) ([]Code, error) {
 
 func (eng *engine) Evaluate(s io.ByteScanner) error {
 	p := Parser{
-		Scanner:     s,
-		Features:    eng.features,
-		GetNumParam: eng.getNumParam,
-		SetNumParam: eng.setNumParam,
+		Scanner:      s,
+		Features:     eng.features,
+		OutW:         eng.outW,
+		ErrW:         eng.errW,
+		GetNumParam:  eng.getNumParam,
+		SetNumParam:  eng.setNumParam,
+		GetNameParam: eng.getNameParam,
+		SetNameParam: eng.setNameParam,
 	}
 
 	for {

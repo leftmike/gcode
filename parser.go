@@ -55,6 +55,7 @@ import (
 	"math"
 	"runtime"
 	"strconv"
+	"strings"
 )
 
 type Letter byte
@@ -83,39 +84,39 @@ const (
 	AllFeatures Features = BeagleG | LinuxCNC | RepRap
 )
 
-func (f Features) hasBeagleG() bool {
+func (f Features) HasBeagleG() bool {
 	return f&BeagleG != 0
 }
 
-func (f Features) hasLinuxCNC() bool {
+func (f Features) HasLinuxCNC() bool {
 	return f&LinuxCNC != 0
 }
 
-func (f Features) hasRepRap() bool {
+func (f Features) HasRepRap() bool {
 	return f&RepRap != 0
-}
-
-type Executor interface {
-	Execute() error
 }
 
 type Parser struct {
 	Scanner  io.ByteScanner
 	Features Features
+	OutW     io.Writer
+	ErrW     io.Writer
 
-	// Comment gets called for each comment; return an Executor to Execute the comment.
-	Comment func(comment string, inline bool) (Executor, error)
+	// GetNumParam returns the value of a global number parameter.
+	GetNumParam func(num int) (Number, bool)
 
-	// GetNumParam returns the value of a number parameter.
-	GetNumParam func(num int) (Number, error)
-
-	// SetNumParam sets the value of a number parameter.
+	// SetNumParam sets the value of a global number parameter.
 	SetNumParam func(num int, val Number) error
+
+	// GetNameParam returns the value of a global name parameter.
+	GetNameParam func(name Name) (Value, bool)
+
+	// SetNameParam sets the value of a global name parameter.
+	SetNameParam func(name Name, val Value) error
 
 	lineState    lineState
 	physicalLine int // Count of lines
 	virtualLine  int // Lines as tracked by Nnnn
-	nameParams   map[Name]Value
 	stack        *stackFrame
 }
 
@@ -295,7 +296,7 @@ func (n Name) evaluate(p *Parser) Value {
 }
 
 func (s String) String() string {
-	return fmt.Sprintf(`"%s"`, string(s))
+	return string(s)
 }
 
 func (_ String) AsName() (Name, bool) {
@@ -317,15 +318,12 @@ func (s String) evaluate(p *Parser) Value {
 func (prm param) evaluate(p *Parser) Value {
 	v := prm.expr.evaluate(p)
 	if num, ok := v.AsNumber(); ok {
-		if p.GetNumParam == nil {
-			p.error("getting number parameters not supported")
-		}
 		for refs := 0; refs < prm.refs; refs += 1 {
-			var err error
-			num, err = p.GetNumParam(int(num))
-			if err != nil {
-				p.error(err.Error())
+			n, ok := num.AsInteger()
+			if !ok || n < 1 {
+				p.error(fmt.Sprintf("number parameter must be a positive integer: %s", num))
 			}
+			num = p.getNumParam(n)
 		}
 		return num
 	}
@@ -335,10 +333,7 @@ func (prm param) evaluate(p *Parser) Value {
 		if !ok {
 			p.error("expected a name parameter")
 		}
-		v, ok = p.nameParams[n]
-		if !ok {
-			p.error(fmt.Sprintf("undefined name parameter: %s", n))
-		}
+		v = p.getNameParam(n)
 	}
 
 	return v
@@ -461,6 +456,51 @@ func (p *Parser) Parse() (codes []Code, err error) {
 		if done && len(codes) > 0 {
 			return codes, nil
 		}
+	}
+}
+
+func (p *Parser) getNumParam(num int) Number {
+	if p.GetNumParam == nil {
+		p.error("getting global number parameters not supported")
+	}
+
+	val, ok := p.GetNumParam(int(num))
+	if !ok {
+		p.error(fmt.Sprintf("global number parameter %s not found", val))
+	}
+	return val
+}
+
+func (p *Parser) setNumParam(num int, val Number) {
+	if p.GetNumParam == nil || p.SetNumParam == nil {
+		p.error("setting global number parameters not supported")
+	}
+
+	err := p.SetNumParam(num, val)
+	if err != nil {
+		p.error(err.Error())
+	}
+}
+
+func (p *Parser) getNameParam(name Name) Value {
+	if p.GetNameParam == nil {
+		p.error("getting global name parameters not supported")
+	}
+	val, ok := p.GetNameParam(name)
+	if !ok {
+		p.error(fmt.Sprintf("global name parameter %s not found", name))
+	}
+	return val
+}
+
+func (p *Parser) setNameParam(name Name, val Value) {
+	if p.GetNameParam == nil || p.SetNameParam == nil {
+		p.error("setting globel name parameters not supported")
+	}
+
+	err := p.SetNameParam(name, val)
+	if err != nil {
+		p.error(err.Error())
 	}
 }
 
@@ -791,7 +831,7 @@ func (p *Parser) parseReference() expression {
 		return param{refs: refs, expr: p.parseExpr()}
 	}
 
-	return param{refs: refs, expr: p.parseParameter().(expression)}
+	return param{refs: refs, expr: p.parseParameter(p.Scanner).(expression)}
 }
 
 func (p *Parser) parseExpr() expression {
@@ -875,34 +915,53 @@ func nameByte(b byte) bool {
 	return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9') || b == '_'
 }
 
-func (p *Parser) parseParameter() Value {
-	b := p.readByte()
+func (p *Parser) parseParameter(r io.ByteScanner) Value {
+	b, err := r.ReadByte()
+	if err != nil {
+		p.error(err.Error())
+	}
 
 	if b >= '0' && b <= '9' {
 		num := int(b - '0')
 		for {
-			b = p.readByte()
+			b, err = r.ReadByte()
+			if err == io.EOF {
+				return Number(num)
+			} else if err != nil {
+				p.error(err.Error())
+			}
 			if b < '0' || b > '9' {
 				break
 			}
 			num = num*10 + int(b-'0')
 			if num > math.MaxInt16 {
-				p.error("number parameter too big")
+				p.error(fmt.Sprintf("number parameter too big: %d", num))
 			}
 		}
 
-		p.Scanner.UnreadByte()
+		err = r.UnreadByte()
+		if err != nil {
+			p.error(err.Error())
+		}
 		return Number(num)
-	} else if (p.Features.hasBeagleG() && nameByte(b)) || b == '<' {
+	} else if (p.Features.HasBeagleG() && nameByte(b)) || b == '<' {
 		var delim bool
 		if b == '<' {
 			delim = true
-			b = p.readByte()
+			b, err = r.ReadByte()
+			if err != nil {
+				p.error(err.Error())
+			}
 		}
 
 		name := []byte{b}
 		for {
-			b = p.readByte()
+			b, err = r.ReadByte()
+			if err == io.EOF && !delim {
+				return Name(name)
+			} else if err != nil {
+				p.error(err.Error())
+			}
 			if nameByte(b) {
 				name = append(name, b)
 			} else {
@@ -915,7 +974,10 @@ func (p *Parser) parseParameter() Value {
 				p.error("missing > at end of parameter")
 			}
 		} else {
-			p.Scanner.UnreadByte()
+			err = r.UnreadByte()
+			if err != nil {
+				p.error(err.Error())
+			}
 		}
 
 		return Name(name)
@@ -1003,7 +1065,7 @@ func (p *Parser) parseAssignOp() assignOp {
 }
 
 func (p *Parser) parseAssignment() action {
-	param := p.parseParameter()
+	param := p.parseParameter(p.Scanner)
 	assignOp := p.parseAssignOp()
 	var expr expression
 	if assignOp == plusPlus || assignOp == minusMinus {
@@ -1130,6 +1192,41 @@ func (p *Parser) parseIfBeagleG() action {
 	}
 }
 
+func (p *Parser) parseComment(comment string, inline bool) action {
+	subs := strings.SplitN(comment, ",", 2)
+	if len(subs) != 2 {
+		return nil
+	}
+
+	var hasParams bool
+	cmd := strings.ToLower(subs[0])
+	body := subs[1]
+	switch cmd {
+	case "msg":
+		if p.OutW == nil {
+			return nil
+		}
+	case "debug":
+		if p.OutW == nil {
+			return nil
+		}
+		hasParams = strings.ContainsRune(body, '#')
+	case "print":
+		if p.ErrW == nil {
+			return nil
+		}
+		hasParams = strings.ContainsRune(body, '#')
+	default:
+		return nil
+	}
+
+	return commentAction{
+		cmd:       cmd,
+		body:      body,
+		hasParams: hasParams,
+	}
+}
+
 type codeAction struct {
 	letter Letter
 	expr   expression
@@ -1150,46 +1247,15 @@ type numAssignAction struct {
 func numAssignment(p *Parser, num int, assignOp assignOp, val Number) {
 	switch assignOp {
 	case assign:
-		err := p.SetNumParam(num, val)
-		if err != nil {
-			p.error(err.Error())
-		}
+		p.setNumParam(num, val)
 	case assignPlus, plusPlus:
-		cur, err := p.GetNumParam(num)
-		if err != nil {
-			p.error(err.Error())
-		}
-		err = p.SetNumParam(num, cur+val)
-		if err != nil {
-			p.error(err.Error())
-		}
+		p.setNumParam(num, p.getNumParam(num)+val)
 	case assignMinus, minusMinus:
-		cur, err := p.GetNumParam(num)
-		if err != nil {
-			p.error(err.Error())
-		}
-		err = p.SetNumParam(num, cur-val)
-		if err != nil {
-			p.error(err.Error())
-		}
+		p.setNumParam(num, p.getNumParam(num)-val)
 	case assignTimes:
-		cur, err := p.GetNumParam(num)
-		if err != nil {
-			p.error(err.Error())
-		}
-		err = p.SetNumParam(num, cur*val)
-		if err != nil {
-			p.error(err.Error())
-		}
+		p.setNumParam(num, p.getNumParam(num)*val)
 	case assignDivide:
-		cur, err := p.GetNumParam(num)
-		if err != nil {
-			p.error(err.Error())
-		}
-		err = p.SetNumParam(num, cur/val)
-		if err != nil {
-			p.error(err.Error())
-		}
+		p.setNumParam(num, p.getNumParam(num)/val)
 	default:
 		panic(fmt.Sprintf("unexpected assign op: %d", assignOp))
 	}
@@ -1198,11 +1264,7 @@ func numAssignment(p *Parser, num int, assignOp assignOp, val Number) {
 func (naa numAssignAction) evaluate(p *Parser, codes []Code, endFuncs []endFunc) ([]Code,
 	[]endFunc, bool) {
 
-	if p.GetNumParam == nil || p.SetNumParam == nil {
-		p.error("setting number parameters not supported")
-	}
-
-	if p.Features.hasLinuxCNC() {
+	if p.Features.HasLinuxCNC() {
 		return codes, append(endFuncs,
 			func(p *Parser) {
 				numAssignment(p, naa.num, naa.assignOp, p.wantNumber(naa.expr.evaluate(p)))
@@ -1221,37 +1283,17 @@ type nameAssignAction struct {
 }
 
 func nameAssignment(p *Parser, name Name, assignOp assignOp, val Value) {
-	if p.nameParams == nil {
-		p.nameParams = map[Name]Value{}
-	}
-
 	switch assignOp {
 	case assign:
-		p.nameParams[name] = val
+		p.setNameParam(name, val)
 	case assignPlus, plusPlus:
-		cur, ok := p.nameParams[name]
-		if !ok {
-			p.error(fmt.Sprintf("undefined name parameter: %s", name))
-		}
-		p.nameParams[name] = p.wantNumber(cur) + p.wantNumber(val)
+		p.setNameParam(name, p.wantNumber(p.getNameParam(name))+p.wantNumber(val))
 	case assignMinus, minusMinus:
-		cur, ok := p.nameParams[name]
-		if !ok {
-			p.error(fmt.Sprintf("undefined name parameter: %s", name))
-		}
-		p.nameParams[name] = p.wantNumber(cur) - p.wantNumber(val)
+		p.setNameParam(name, p.wantNumber(p.getNameParam(name))-p.wantNumber(val))
 	case assignTimes:
-		cur, ok := p.nameParams[name]
-		if !ok {
-			p.error(fmt.Sprintf("undefined name parameter: %s", name))
-		}
-		p.nameParams[name] = p.wantNumber(cur) * p.wantNumber(val)
+		p.setNameParam(name, p.wantNumber(p.getNameParam(name))*p.wantNumber(val))
 	case assignDivide:
-		cur, ok := p.nameParams[name]
-		if !ok {
-			p.error(fmt.Sprintf("undefined name parameter: %s", name))
-		}
-		p.nameParams[name] = p.wantNumber(cur) / p.wantNumber(val)
+		p.setNameParam(name, p.wantNumber(p.getNameParam(name))/p.wantNumber(val))
 	default:
 		panic(fmt.Sprintf("unexpected assign op: %d", assignOp))
 	}
@@ -1260,7 +1302,7 @@ func nameAssignment(p *Parser, name Name, assignOp assignOp, val Value) {
 func (naa nameAssignAction) evaluate(p *Parser, codes []Code, endFuncs []endFunc) ([]Code,
 	[]endFunc, bool) {
 
-	if p.Features.hasLinuxCNC() {
+	if p.Features.HasLinuxCNC() {
 		return codes, append(endFuncs,
 			func(p *Parser) {
 				nameAssignment(p, naa.name, naa.assignOp, naa.expr.evaluate(p))
@@ -1273,16 +1315,64 @@ func (naa nameAssignAction) evaluate(p *Parser, codes []Code, endFuncs []endFunc
 }
 
 type commentAction struct {
-	Executor
+	cmd       string
+	body      string
+	hasParams bool
+}
+
+func (p *Parser) evaluateComment(w io.Writer, body string) {
+	r := strings.NewReader(body)
+
+	for {
+		b, err := r.ReadByte()
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			p.error(err.Error())
+		}
+
+		if b != '#' {
+			w.Write([]byte{b})
+			continue
+		}
+
+		param := p.parseParameter(r)
+		if num, ok := param.AsNumber(); ok {
+			n, ok := num.AsInteger()
+			if !ok || n < 1 {
+				p.error(fmt.Sprintf("number parameter must be a positive integer: %s", num))
+			}
+			fmt.Fprint(w, p.getNumParam(n))
+		} else {
+			fmt.Fprint(w, p.getNameParam(param.(Name)))
+		}
+	}
+
+	fmt.Fprintln(w)
 }
 
 func (ca commentAction) evaluate(p *Parser, codes []Code, endFuncs []endFunc) ([]Code, []endFunc,
 	bool) {
 
-	err := ca.Execute()
-	if err != nil {
-		p.error(err.Error())
+	switch ca.cmd {
+	case "msg":
+		fmt.Fprintln(p.OutW, ca.body)
+	case "debug":
+		if ca.hasParams {
+			p.evaluateComment(p.OutW, ca.body)
+		} else {
+			fmt.Fprintln(p.OutW, ca.body)
+		}
+	case "print":
+		if ca.hasParams {
+			p.evaluateComment(p.ErrW, ca.body)
+		} else {
+			fmt.Fprintln(p.ErrW, ca.body)
+		}
+	default:
+		panic(fmt.Sprintf("unexpected comment cmd: %s", ca.cmd))
 	}
+
 	return codes, endFuncs, false
 }
 
@@ -1376,17 +1466,13 @@ func (p *Parser) parse() action {
 				bytes = append(bytes, b)
 			}
 
-			if p.Comment != nil {
-				exec, err := p.Comment(string(bytes), false)
-				if err != nil {
-					p.error(err.Error())
-				}
-				if exec != nil {
+			if p.Features.HasLinuxCNC() {
+				act := p.parseComment(string(bytes), false)
+				if act != nil {
 					p.unreadByte()
-					return commentAction{exec}
+					return act
 				}
 			}
-
 			return eolAction{}
 		} else if b == '(' {
 			var bytes []byte
@@ -1401,13 +1487,10 @@ func (p *Parser) parse() action {
 				bytes = append(bytes, b)
 			}
 
-			if p.Comment != nil {
-				exec, err := p.Comment(string(bytes), true)
-				if err != nil {
-					p.error(err.Error())
-				}
-				if exec != nil {
-					return commentAction{exec}
+			if p.Features.HasLinuxCNC() {
+				act := p.parseComment(string(bytes), true)
+				if act != nil {
+					return act
 				}
 			}
 		} else if b == '*' {
@@ -1433,7 +1516,7 @@ func (p *Parser) parse() action {
 			}
 			p.lineState = inBody
 
-			if p.Features.hasBeagleG() {
+			if p.Features.HasBeagleG() {
 				switch kw {
 				case "WHILE":
 					return p.parseWhileBeagleG()

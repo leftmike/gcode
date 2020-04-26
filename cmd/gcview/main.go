@@ -25,6 +25,7 @@ var (
 	beagleGFeature  = flag.Bool("beagleg", false, "enable BeagleG dialect")
 	linuxCNCFeature = flag.Bool("linuxcnc", false, "enable LinuxCNC dialect")
 	repRapFeature   = flag.Bool("reprap", false, "enable RepRap dialect")
+	displayHtml     = flag.Bool("html", true, "start browser to display html")
 )
 
 func startBrowser(url string) {
@@ -179,7 +180,7 @@ func main() {
 		m := machine{
 			base: base,
 		}
-		eng := gcode.NewEngine(&m, features)
+		eng := gcode.NewEngine(&m, features, os.Stdout, os.Stderr)
 		err = eng.Evaluate(bufio.NewReader(f))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "gcview: %s: %s\n", base, err)
@@ -195,7 +196,7 @@ func main() {
 		fmt.Printf("%s -> %s\n", base, out)
 		fmt.Printf("%s -> %s\n", m.homePos, m.maxPos)
 
-		if adx < 4 {
+		if adx < 4 && *displayHtml {
 			startBrowser("file://" + out)
 		}
 	}

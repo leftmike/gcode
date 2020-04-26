@@ -91,6 +91,20 @@ The goal is to support multiple dialects of G-code.
 
 ### LinuxCNC Specific Syntax
 
+Comments which begin with `msg,` or `debug,` are written to standard output. For example,
+`(msg,hello world!)` will write `hello world!`.
+
+Comments which begin with `print,` are written to standard error.
+
+In addition, in `debug,` and `print,` comments, the values of parameters in the body of the
+comment will be expanded to their values. For example, the following code will write
+`value of parameter 123: 456` to standard error.
+
+```
+#123=456
+(print,value of parameter 123: #123)
+```
+
 ### BeagleG Specific Syntax
 
 * IF *expression* THEN *assignment*

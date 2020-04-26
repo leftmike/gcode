@@ -1,6 +1,7 @@
 package gcode_test
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -680,7 +681,8 @@ G2 X3 Y1 R0.99999
 	}
 
 	for i, c := range cases {
-		eng := gcode.NewEngine(&machine{actions: c.actions}, gcode.AllFeatures)
+		eng := gcode.NewEngine(&machine{actions: c.actions}, gcode.AllFeatures, os.Stdout,
+			os.Stderr)
 		err := eng.Evaluate(strings.NewReader(c.s))
 		if err != nil {
 			t.Errorf("Evaluate(%d) failed: %s", i, err)
@@ -709,7 +711,7 @@ func TestArcFail(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		eng := gcode.NewEngine(&machine{}, gcode.AllFeatures)
+		eng := gcode.NewEngine(&machine{}, gcode.AllFeatures, os.Stdout, os.Stderr)
 		err := eng.Evaluate(strings.NewReader(c))
 		if err == nil {
 			t.Errorf("Evaluate(%s) did not fail", c)
