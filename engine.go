@@ -90,7 +90,7 @@ type engine struct {
 	curCoordSys      int
 	coordSysPos      [9]Position
 	workPos          Position
-	savedWorkPos     Position
+	useWorkPos       bool
 	moveMode         moveMode
 	absoluteMode     bool
 	absoluteArcMode  bool
@@ -120,7 +120,7 @@ func NewEngine(m Machine, f Features, outW, errW io.Writer) *engine {
 			zeroPosition, zeroPosition, zeroPosition,
 		},
 		workPos:          zeroPosition,
-		savedWorkPos:     zeroPosition,
+		useWorkPos:       false,
 		moveMode:         linearMove,
 		absoluteMode:     true,
 		absoluteArcMode:  false,
@@ -302,7 +302,10 @@ func hasArg(args []arg, letter Letter) bool {
 
 func (eng *engine) toMachineX(x float64, absolute bool) float64 {
 	if absolute {
-		return x - eng.coordSysPos[eng.curCoordSys].X - eng.workPos.X
+		if eng.useWorkPos {
+			return x - eng.coordSysPos[eng.curCoordSys].X - eng.workPos.X
+		}
+		return x - eng.coordSysPos[eng.curCoordSys].X
 	}
 	// relative
 	return eng.curPos.X + x
@@ -310,7 +313,10 @@ func (eng *engine) toMachineX(x float64, absolute bool) float64 {
 
 func (eng *engine) toMachineY(y float64, absolute bool) float64 {
 	if absolute {
-		return y - eng.coordSysPos[eng.curCoordSys].Y - eng.workPos.Y
+		if eng.useWorkPos {
+			return y - eng.coordSysPos[eng.curCoordSys].Y - eng.workPos.Y
+		}
+		return y - eng.coordSysPos[eng.curCoordSys].Y
 	}
 	// relative
 	return eng.curPos.Y + y
@@ -318,7 +324,10 @@ func (eng *engine) toMachineY(y float64, absolute bool) float64 {
 
 func (eng *engine) toMachineZ(z float64, absolute bool) float64 {
 	if absolute {
-		return z - eng.coordSysPos[eng.curCoordSys].Z - eng.workPos.Z
+		if eng.useWorkPos {
+			return z - eng.coordSysPos[eng.curCoordSys].Z - eng.workPos.Z
+		}
+		return z - eng.coordSysPos[eng.curCoordSys].Z
 	}
 	// relative
 	return eng.curPos.Z + z
@@ -537,7 +546,7 @@ func (eng *engine) setWorkPosition(codes []Code) ([]Code, error) {
 			eng.workPos.Z += eng.toMachineZ(float64(arg.num)*eng.units, true) - eng.curPos.Z
 		}
 	}
-	eng.savedWorkPos = eng.workPos
+	eng.useWorkPos = true
 
 	return codes, nil
 }
@@ -669,13 +678,12 @@ func (eng *engine) Evaluate(s io.ByteScanner) error {
 						return err
 					}
 				} else if num.Equal(92.1) { // G92.1: zero work position
+					eng.useWorkPos = false
 					eng.workPos = zeroPosition
-					eng.savedWorkPos = zeroPosition
 				} else if num.Equal(92.2) { // G92.2: save work position, then zero
-					eng.savedWorkPos = eng.workPos
-					eng.workPos = zeroPosition
+					eng.useWorkPos = false
 				} else if num.Equal(92.3) { // G92.3: restore saved work position
-					eng.workPos = eng.savedWorkPos
+					eng.useWorkPos = true
 				} else {
 					codes, err = eng.handleUnknown(code, codes, eng.setCurrentPosition)
 					if err != nil {
