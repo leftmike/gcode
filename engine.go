@@ -14,6 +14,17 @@ To Do:
 -- Subroutines can change the value of parameters above #30 and those changes will be visible to the calling code. Subroutines may also change the value of global named parameters.
 
 - predefined parameters
+-- XXX: need to handle units with parameters (get and set)
+-- 5161-5169 - "G28" Home for X, Y, Z, A, B, C, U, V & W. Persistent.
+-- 5181-5189 - "G30" Home for X, Y, Z, A, B, C, U, V & W. Persistent.
+-- 5211-5219 - "G92" offset for X, Y, Z, A, B, C, U, V & W. Persistent.
+-- 5210 - 1 if "G92" offset is currently applied, 0 otherwise. Persistent.
+-- 5211-5219 - G92 offset (X Y Z A B C U V W). Persistent?
+-- 5400 - Tool Number. Volatile.
+-- 5420-5428 - Current relative position in the active coordinate system including all offsets and in the current program units for X, Y, Z, A, B, C, U, V & W, volatile.
+
+- CAMotics/tests
+- LinuxCNC/tests
 */
 
 import (
@@ -130,32 +141,6 @@ func (eng *engine) endProgram() error {
 		eng.spindleOn = false
 		return eng.spindleOff()
 	}
-	return nil
-}
-
-func (eng *engine) getNumParam(num int) (Number, bool) {
-	val, ok := eng.numParams[num]
-	if !ok {
-		return 0, false
-	}
-	return val, true
-}
-
-func (eng *engine) setNumParam(num int, val Number) error {
-	eng.numParams[num] = val
-	return nil
-}
-
-func (eng *engine) getNameParam(name Name) (Value, bool) {
-	val, ok := eng.nameParams[name]
-	if !ok {
-		return nil, false
-	}
-	return val, true
-}
-
-func (eng *engine) setNameParam(name Name, val Value) error {
-	eng.nameParams[name] = val
 	return nil
 }
 

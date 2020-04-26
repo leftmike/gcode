@@ -114,10 +114,11 @@ type Parser struct {
 	// SetNameParam sets the value of a global name parameter.
 	SetNameParam func(name Name, val Value) error
 
-	lineState    lineState
-	physicalLine int // Count of lines
-	virtualLine  int // Lines as tracked by Nnnn
-	stack        *stackFrame
+	lineState     lineState
+	physicalLine  int // Count of lines
+	virtualLine   int // Lines as tracked by Nnnn
+	stack         *stackFrame
+	noDebugOutput bool
 }
 
 const (
@@ -459,7 +460,18 @@ func (p *Parser) Parse() (codes []Code, err error) {
 	}
 }
 
+const (
+	debugOutputParam = 5599
+)
+
 func (p *Parser) getNumParam(num int) Number {
+	if num == debugOutputParam {
+		if p.noDebugOutput {
+			return 0
+		}
+		return 1
+	}
+
 	if p.GetNumParam == nil {
 		p.error("getting global number parameters not supported")
 	}
@@ -472,6 +484,15 @@ func (p *Parser) getNumParam(num int) Number {
 }
 
 func (p *Parser) setNumParam(num int, val Number) {
+	if num == debugOutputParam {
+		if val.Equal(0.0) {
+			p.noDebugOutput = true
+		} else {
+			p.noDebugOutput = false
+		}
+		return
+	}
+
 	if p.GetNumParam == nil || p.SetNumParam == nil {
 		p.error("setting global number parameters not supported")
 	}
@@ -1207,7 +1228,7 @@ func (p *Parser) parseComment(comment string, inline bool) action {
 			return nil
 		}
 	case "debug":
-		if p.OutW == nil {
+		if p.OutW == nil || p.noDebugOutput {
 			return nil
 		}
 		hasParams = strings.ContainsRune(body, '#')

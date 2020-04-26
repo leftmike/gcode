@@ -56,6 +56,22 @@ The goal is to support multiple dialects of G-code.
 | S*n.n* | | spindle speed |
 | T*n* | | select tool |
 
+## Parameters
+
+| Parameter | Default | Persistent | Description |
+|-----------|---------|------------|-------------|
+| 5220 | 1 | yes | current coordinate system (G54 to G59.3) |
+| 5221, 5222, 5223 | 0, 0, 0 | yes | X, Y, Z for coordinate system 1 (G54) |
+| 5241, 5242, 5243 | 0, 0, 0 | yes | X, Y, Z for coordinate system 2 (G55) |
+| 5261, 5262, 5263 | 0, 0, 0 | yes | X, Y, Z for coordinate system 3 (G56) |
+| 5281, 5282, 5283 | 0, 0, 0 | yes | X, Y, Z for coordinate system 4 (G57) |
+| 5301, 5302, 5303 | 0, 0, 0 | yes | X, Y, Z for coordinate system 5 (G58) |
+| 5321, 5322, 5323 | 0, 0, 0 | yes | X, Y, Z for coordinate system 6 (G59) |
+| 5341, 5342, 5343 | 0, 0, 0 | yes | X, Y, Z for coordinate system 7 (G59.1) |
+| 5361, 5362, 5363 | 0, 0, 0 | yes | X, Y, Z for coordinate system 8 (G59.2) |
+| 5381, 5382, 5383 | 0, 0, 0 | yes | X, Y, Z for coordinate system 9 (G59.3) |
+| 5599 | 1 | no | flag to control output of `(debug,...)` comments; 0 means off |
+
 ## Syntax
 
 ### Expression Syntax

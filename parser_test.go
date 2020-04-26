@@ -615,6 +615,14 @@ a string <name> 321.0000
 `,
 			errW: "456.0000 789.0000\n",
 		},
+		{s: `#5599=0
+(debug,no message)
+#5599=1
+(debug,need message)
+G10
+`,
+			outW: "need message\n",
+		},
 		{s: "(debug,#<abc>) G10\n", fail: true},
 		{s: "(debug,# ) G10\n", fail: true},
 		{s: "(debug, #) G10\n", fail: true},

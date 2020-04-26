@@ -246,6 +246,29 @@ Y-1
 		},
 		{s: `
 G21
+G10 L2 P3 Y-1
+#5261=-1
+#5220=3
+G90
+G0 X0 Y0
+G91
+G1 F1
+X1
+Y1
+X-1
+Y-1
+`,
+			actions: []action{
+				{cmd: rapidTo, x: 1.0, y: 1.0},
+				{cmd: setFeed, f: 1.0},
+				{cmd: linearTo, x: 2.0, y: 1.0},
+				{cmd: linearTo, x: 2.0, y: 2.0},
+				{cmd: linearTo, x: 1.0, y: 2.0},
+				{cmd: linearTo, x: 1.0, y: 1.0},
+			},
+		},
+		{s: `
+G21
 G90
 G0 X1 Y1 Z1
 G10 L20 P1 X0 Y0 Z0
@@ -919,7 +942,7 @@ Y1
 X-1
 Y-1
 
-G%s
+%s
 G90
 G0 X0 Y0
 G91
@@ -977,9 +1000,14 @@ G10 L20 P5 X-2 Y3
 G0 X5 Y0
 G10 L20 P6 X3 Y-2
 G0 X0 Y0
-G10 L20 P7 X-2 Y-2
-G10 L20 P8 X-2 Y-2
-G10 L20 P9 X-2 Y-2
+G10 L20 P7 X-2 Y-2 Z10
+#5343=0
+;G10 L20 P8 X-2 Y-2
+#5361=-2
+#5362=-2
+;G10 L20 P9 X-2 Y-2
+#5381=-2
+#5382=-2
 
 G55
 G90
@@ -991,7 +1019,7 @@ Y1
 X-1
 Y-1
 
-G%s
+%s
 G90
 G0 X0 Y0
 G91
@@ -1038,7 +1066,9 @@ Y-1
 		},
 	}
 
-	for _, cs := range []string{"56", "57", "58", "59", "59.1", "59.2", "59.3"} {
+	for _, cs := range []string{"G56", "G57", "G58", "G59", "G59.1", "G59.2", "G59.3",
+		"#5220=3", "#5220=4", "#5220=5", "#5220=6", "#5220=7", "#5220=8", "#5220=9"} {
+
 		for i, c := range cases {
 			eng := gcode.NewEngine(&machine{actions: c.actions}, gcode.AllFeatures, os.Stdout,
 				os.Stderr)
