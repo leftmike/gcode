@@ -62,7 +62,7 @@ The goal is to support multiple dialects of G-code.
 |-----------|---------|------------|-------------|
 | 5161, 5162, 5163 | 0, 0, 0 | yes | X, Y, Z for home position (G28) |
 | 5181, 5182, 5183 | 0, 0, 0 | yes | X, Y, Z for predefined position (G30) |
-| 5210 | 0 | yes | flag to control works offsets; 0 means off |
+| 5210 | 0 | yes | flag to control works offsets; 0 means off (G92) |
 | 5211, 5212, 5213 | 0, 0, 0 | yes | X, Y, Z for work offsets (G92) |
 | 5220 | 1 | yes | current coordinate system (G54 to G59.3) |
 | 5221, 5222, 5223 | 0, 0, 0 | yes | X, Y, Z for coordinate system 1 offsets (G54) |
@@ -74,6 +74,7 @@ The goal is to support multiple dialects of G-code.
 | 5341, 5342, 5343 | 0, 0, 0 | yes | X, Y, Z for coordinate system 7 offsets (G59.1) |
 | 5361, 5362, 5363 | 0, 0, 0 | yes | X, Y, Z for coordinate system 8 offsets (G59.2) |
 | 5381, 5382, 5383 | 0, 0, 0 | yes | X, Y, Z for coordinate system 9 offsets (G59.3) |
+| 5420, 5421, 5422 | | no | X, Y, Z for current position in active coordinate system |
 | 5599 | 1 | no | flag to control output of `(debug,...)` comments; 0 means off |
 
 ## Syntax

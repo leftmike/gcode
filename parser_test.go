@@ -619,7 +619,6 @@ a string <name> 321.0000
 (debug,no message)
 #5599=1
 (debug,need message)
-G10
 `,
 			outW: "need message\n",
 		},
@@ -661,11 +660,11 @@ G10
 
 		_, err := p.Parse()
 		if c.fail {
-			if err == nil {
+			if err == nil || err == io.EOF {
 				t.Errorf("Parse(%s) did not fail", c.s)
 			}
 			continue
-		} else if err != nil {
+		} else if err != nil && err != io.EOF {
 			t.Errorf("Parse(%s) failed with %s", c.s, err)
 		}
 

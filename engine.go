@@ -12,10 +12,11 @@ To Do:
 -- O codes
 -- O codes can be followed by a number or a name
 -- Subroutines can change the value of parameters above #30 and those changes will be visible to the calling code. Subroutines may also change the value of global named parameters.
+-- predefined named parameters
 
-- predefined parameters
--- 5400 - Tool Number. Volatile.
--- 5420-5428 - Current relative position in the active coordinate system including all offsets and in the current program units for X, Y, Z, A, B, C, U, V & W, volatile.
+- load and save persistent parameters
+-- number parameters > 30 are persistent; save if != 0.0
+-- file format should be a gcode file loaded by Parser.Parse()
 
 - CAMotics/tests
 - LinuxCNC/tests

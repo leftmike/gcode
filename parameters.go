@@ -18,6 +18,9 @@ const (
 	curCoordSysParam  = 5220
 	coordSysParam     = 5221 // Nine sets of coordinate system parameters starting here.
 	coordSysParamStep = 20   // Gap between each coordinate system's parameters.
+	curPosXParam      = 5420
+	curPosYParam      = 5421
+	curPosZParam      = 5422
 )
 
 func (eng *engine) getCoordSysParam(num int) (Number, bool) {
@@ -77,6 +80,24 @@ func (eng *engine) getNumParam(num int) (Number, bool) {
 		return Number(eng.workPos.Z / eng.units), true
 	case curCoordSysParam:
 		return Number(eng.curCoordSys + 1), true
+	case curPosXParam:
+		if eng.useWorkPos {
+			return Number((eng.curPos.X + eng.coordSysPos[eng.curCoordSys].X + eng.workPos.X) /
+				eng.units), true
+		}
+		return Number((eng.curPos.X + eng.coordSysPos[eng.curCoordSys].X) / eng.units), true
+	case curPosYParam:
+		if eng.useWorkPos {
+			return Number((eng.curPos.Y + eng.coordSysPos[eng.curCoordSys].Y + eng.workPos.Y) /
+				eng.units), true
+		}
+		return Number((eng.curPos.Y + eng.coordSysPos[eng.curCoordSys].Y) / eng.units), true
+	case curPosZParam:
+		if eng.useWorkPos {
+			return Number((eng.curPos.Z + eng.coordSysPos[eng.curCoordSys].Z + eng.workPos.Z) /
+				eng.units), true
+		}
+		return Number((eng.curPos.Z + eng.coordSysPos[eng.curCoordSys].Z) / eng.units), true
 	}
 
 	if num >= coordSysParam && num < coordSysParam*coordSysParamStep*9 {
@@ -88,6 +109,10 @@ func (eng *engine) getNumParam(num int) (Number, bool) {
 		return 0, false
 	}
 	return val, true
+}
+
+func readOnlyNumParam(num int) error {
+	return fmt.Errorf("global number parameter #%d is read-only", num)
 }
 
 func (eng *engine) setNumParam(num int, val Number) error {
@@ -133,6 +158,12 @@ func (eng *engine) setNumParam(num int, val Number) error {
 		}
 		eng.curCoordSys = n - 1
 		return nil
+	case curPosXParam:
+		return readOnlyNumParam(curPosXParam)
+	case curPosYParam:
+		return readOnlyNumParam(curPosYParam)
+	case curPosZParam:
+		return readOnlyNumParam(curPosZParam)
 	}
 
 	if num >= coordSysParam && num < coordSysParam*coordSysParamStep*9 {

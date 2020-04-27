@@ -1,6 +1,7 @@
 package gcode_test
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"strings"
@@ -1175,6 +1176,137 @@ Y-1
 	}
 }
 
+func TestCurrentPosition(t *testing.T) {
+	cases := []struct {
+		s       string
+		actions []action
+		out     string
+	}{
+		{s: `
+(debug,)
+G21
+G10 L2 P1 X0 Y0
+G10 L2 P2 X0 Y-2
+G90
+G1 F1
+
+G54
+G0 X0 Y0
+G1 X1
+Y1
+X0
+Y0
+
+G55
+(debug,#5420 #5421)
+G0 X0 Y0
+(debug,#5420 #5421)
+G54
+(debug,#5420 #5421)
+G55
+G1 X1
+Y1
+X0
+Y0
+
+G54
+G0 X0 Y0
+G92 X-2
+G0 X0 Y0
+G1 X1
+Y1
+X0
+Y0
+
+G55
+G0 X0 Y0
+G1 X1
+Y1
+X0
+Y0
+
+(debug,#5420 #5421)
+G92 X-2
+(debug,#5420 #5421)
+G54
+(debug,#5420 #5421)
+G55
+G0 X0 Y0
+G1 X1
+Y1
+X0
+Y0
+
+G54
+G0 X0 Y0
+G1 X1
+Y1
+X0
+Y0
+`,
+			actions: []action{
+				{cmd: setFeed, f: 1.0},
+				{cmd: linearTo, x: 1.0, y: 0.0},
+				{cmd: linearTo, x: 1.0, y: 1.0},
+				{cmd: linearTo, x: 0.0, y: 1.0},
+				{cmd: linearTo, x: 0.0, y: 0.0},
+
+				{cmd: rapidTo, x: 0.0, y: 2.0},
+				{cmd: linearTo, x: 1.0, y: 2.0},
+				{cmd: linearTo, x: 1.0, y: 3.0},
+				{cmd: linearTo, x: 0.0, y: 3.0},
+				{cmd: linearTo, x: 0.0, y: 2.0},
+
+				{cmd: rapidTo, x: 0.0, y: 0.0},
+				{cmd: rapidTo, x: 2.0, y: 0.0},
+				{cmd: linearTo, x: 3.0, y: 0.0},
+				{cmd: linearTo, x: 3.0, y: 1.0},
+				{cmd: linearTo, x: 2.0, y: 1.0},
+				{cmd: linearTo, x: 2.0, y: 0.0},
+
+				{cmd: rapidTo, x: 2.0, y: 2.0},
+				{cmd: linearTo, x: 3.0, y: 2.0},
+				{cmd: linearTo, x: 3.0, y: 3.0},
+				{cmd: linearTo, x: 2.0, y: 3.0},
+				{cmd: linearTo, x: 2.0, y: 2.0},
+
+				{cmd: rapidTo, x: 4.0, y: 2.0},
+				{cmd: linearTo, x: 5.0, y: 2.0},
+				{cmd: linearTo, x: 5.0, y: 3.0},
+				{cmd: linearTo, x: 4.0, y: 3.0},
+				{cmd: linearTo, x: 4.0, y: 2.0},
+
+				{cmd: rapidTo, x: 4.0, y: 0.0},
+				{cmd: linearTo, x: 5.0, y: 0.0},
+				{cmd: linearTo, x: 5.0, y: 1.0},
+				{cmd: linearTo, x: 4.0, y: 1.0},
+				{cmd: linearTo, x: 4.0, y: 0.0},
+			},
+			out: `
+0.0000 -2.0000
+0.0000 0.0000
+0.0000 2.0000
+0.0000 0.0000
+-2.0000 0.0000
+-2.0000 2.0000
+`,
+		},
+	}
+
+	for i, c := range cases {
+		var outW bytes.Buffer
+		eng := gcode.NewEngine(&machine{actions: c.actions}, gcode.AllFeatures, &outW, &outW)
+		err := eng.Evaluate(strings.NewReader(c.s))
+		if err != nil {
+			t.Errorf("Evaluate(%d) failed: %s", i, err)
+		}
+		out := outW.String()
+		if out != c.out {
+			t.Errorf("Evaluate(%d) outW: got %s want %s", i, out, c.out)
+		}
+	}
+}
+
 func TestEvaluateFail(t *testing.T) {
 	cases := []string{
 		"G0 L0\n",
@@ -1203,6 +1335,9 @@ func TestEvaluateFail(t *testing.T) {
 		"S-1\n",
 		"T-1\n",
 		"T1.1\n",
+		"#5420=123\n",
+		"#5421=123\n",
+		"#5422=123\n",
 	}
 
 	for _, c := range cases {
