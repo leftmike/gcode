@@ -604,8 +604,8 @@ func TestParseComments(t *testing.T) {
 #<def>="a string"
 #<ghi>=<name>
 (msg,#123 #<abc>)
-(debug,#123 #<abc>)
-(print,#123 #<abc>)
+(debug,#123 #<aBc>)
+(print,#123 #<AbC>)
 (debug,#<def> #<ghi> #456)
 G10
 `,

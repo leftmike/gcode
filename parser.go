@@ -50,6 +50,7 @@ package gcode
 */
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"math"
@@ -979,7 +980,10 @@ func (p *Parser) parseParameter(r io.ByteScanner) Value {
 		for {
 			b, err = r.ReadByte()
 			if err == io.EOF && !delim {
-				return Name(name)
+				if len(name) == 0 {
+					p.error("empty parameter names not allowed")
+				}
+				return Name(bytes.ToLower(name))
 			} else if err != nil {
 				p.error(err.Error())
 			}
@@ -1001,7 +1005,10 @@ func (p *Parser) parseParameter(r io.ByteScanner) Value {
 			}
 		}
 
-		return Name(name)
+		if len(name) == 0 {
+			p.error("empty parameter names not allowed")
+		}
+		return Name(bytes.ToLower(name))
 	}
 
 	p.error(fmt.Sprintf("expected parameter name or number; got %c", b))
@@ -1040,11 +1047,11 @@ func (p *Parser) parseName() Name {
 	}
 
 	if b != '>' {
-		p.error("missing > at end of parameter")
+		p.error("missing > at end of name")
 	} else if len(name) == 0 {
 		p.error("empty names not allowed")
 	}
-	return Name(name)
+	return Name(bytes.ToLower(name))
 }
 
 func (p *Parser) parseAssignOp() assignOp {
